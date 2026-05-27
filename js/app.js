@@ -5,12 +5,30 @@
   const Charts = window.PlannerCharts;
 
   // ----- Persistent state -----
-  const STATE_KEY = "super_planner_state_v1";
+  const STATE_KEY = "super_planner_state_v2";
+  const LEGACY_STATE_KEY = "super_planner_state_v1";
+
+  function migratePerson(p) {
+    if (!p.paygIncome) {
+      p.paygIncome = { ...D.emptyPayg(), item1: p.taxableIncome || 0 };
+    }
+    if (!p.businessIncome) p.businessIncome = D.emptyBusiness();
+    if (!p.deductions) p.deductions = D.emptyDeductions();
+    C.recomputePerson(p);
+    return p;
+  }
+
   function loadState() {
     try {
-      const raw = localStorage.getItem(STATE_KEY);
+      let raw = localStorage.getItem(STATE_KEY);
+      if (!raw) {
+        const legacy = localStorage.getItem(LEGACY_STATE_KEY);
+        if (legacy) raw = legacy;
+      }
       if (!raw) return null;
-      return JSON.parse(raw);
+      const s = JSON.parse(raw);
+      if (Array.isArray(s.people)) s.people.forEach(migratePerson);
+      return s;
     } catch (e) {
       return null;
     }
@@ -30,6 +48,7 @@
     medicareLevy: D.MEDICARE_LEVY,
   };
   const state = initial;
+  state.people.forEach(C.recomputePerson);
 
   // ----- Helpers -----
   const money = (n) =>
@@ -189,6 +208,27 @@
     state.people.forEach((p) => {
       const cf = C.carryForwardAvailable(p, state.targetYear, state.caps);
       const employer = p.employerContribs?.[state.targetYear] || 0;
+      const inc = C.computePersonIncome(p);
+
+      const paygRows = D.PAYG_ITEMS.map((it) => `
+        <tr><td>${it.label}</td>
+        <td><input type="number" data-id="${p.id}" data-bind="payg" data-key="${it.key}" value="${p.paygIncome?.[it.key] || 0}" style="width:160px;text-align:right"/></td></tr>
+      `).join("");
+
+      const businessRows = D.BUSINESS_ITEMS.map((it) => `
+        <tr><td>${it.label}</td>
+        <td><input type="number" data-id="${p.id}" data-bind="business" data-key="${it.key}" value="${p.businessIncome?.[it.key] || 0}" style="width:160px;text-align:right"/></td></tr>
+      `).join("");
+
+      const personalSuperDeduction = p.personalContribs?.[state.targetYear] || 0;
+      const deductionRows = D.DEDUCTION_ITEMS.map((it) => {
+        const v = it.key === "D12" ? personalSuperDeduction : (p.deductions?.[it.key] || 0);
+        const input = it.readOnly
+          ? `<input type="number" value="${v}" disabled style="width:160px;text-align:right;opacity:.7"/>`
+          : `<input type="number" data-id="${p.id}" data-bind="deduction" data-key="${it.key}" value="${v}" style="width:160px;text-align:right"/>`;
+        return `<tr><td>${it.label}</td><td>${input}</td></tr>`;
+      }).join("");
+
       const node = document.createElement("div");
       node.className = "card";
       node.innerHTML = `
@@ -198,13 +238,52 @@
         </div>
         <div class="field-row">
           <div class="field"><label>Name</label><input data-bind="name" data-id="${p.id}" value="${p.name}"/></div>
-          <div class="field"><label>Taxable income before super</label><input type="number" data-bind="taxableIncome" data-id="${p.id}" value="${p.taxableIncome}"/></div>
+          <div class="field"><label>PAYG withheld (current FY)</label><input type="number" data-bind="paygWithheld" data-id="${p.id}" value="${p.paygWithheld}"/></div>
         </div>
         <div class="field-row">
-          <div class="field"><label>PAYG withheld</label><input type="number" data-bind="paygWithheld" data-id="${p.id}" value="${p.paygWithheld}"/></div>
           <div class="field"><label>Total super balance (30 Jun prior)</label><input type="number" data-bind="tsb" data-id="${p.id}" value="${p.tsb}"/></div>
+          <div class="field"><label>Derived taxable income (read-only)</label><input type="number" value="${inc.taxableIncome}" disabled style="opacity:.7"/></div>
         </div>
-        <h4 style="margin:16px 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Concessional contributions per FY (employer + personal)</h4>
+
+        <div class="grid grid-2" style="margin-top:18px;">
+          <div>
+            <h4 style="margin:0 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">PAYG / employment income (Items 1–3)</h4>
+            <table>
+              <thead><tr><th>Item</th><th style="text-align:right">Amount</th></tr></thead>
+              <tbody>
+                ${paygRows}
+                <tr class="highlight"><td><strong>Total PAYG income</strong></td><td style="text-align:right"><strong>${money(inc.payg)}</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <h4 style="margin:0 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Business / partnership / trust income (Items 13, 15)</h4>
+            <table>
+              <thead><tr><th>Item</th><th style="text-align:right">Amount</th></tr></thead>
+              <tbody>
+                ${businessRows}
+                <tr class="highlight"><td><strong>Total business income</strong></td><td style="text-align:right"><strong>${money(inc.business)}</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <h4 style="margin:18px 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Deductions (D1 – D15)</h4>
+        <table>
+          <thead><tr><th>Item</th><th style="text-align:right">Amount</th></tr></thead>
+          <tbody>
+            ${deductionRows}
+            <tr class="highlight"><td><strong>Total deductions</strong></td><td style="text-align:right"><strong>${money(inc.deductions + personalSuperDeduction)}</strong></td></tr>
+          </tbody>
+        </table>
+
+        <div class="grid grid-3" style="margin-top:14px;">
+          <div class="kpi"><div class="label">Gross assessable income</div><div class="value">${money(inc.grossIncome)}</div><div class="delta">PAYG ${money(inc.payg)} + Business ${money(inc.business)}</div></div>
+          <div class="kpi"><div class="label">Total deductions (excl. D12)</div><div class="value">${money(inc.deductions)}</div><div class="delta">D12 personal super tracked separately</div></div>
+          <div class="kpi good"><div class="label">Taxable income before super</div><div class="value">${money(inc.taxableIncome)}</div></div>
+        </div>
+
+        <h4 style="margin:18px 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Concessional contributions per FY (employer + personal)</h4>
         <table>
           <thead><tr><th>Year</th><th>Cap</th><th>Employer</th><th>Personal</th><th>Used</th><th>Unused</th></tr></thead>
           <tbody>
@@ -243,12 +322,17 @@
         const id = e.target.dataset.id;
         const bind = e.target.dataset.bind;
         const year = e.target.dataset.year;
+        const key = e.target.dataset.key;
         const person = state.people.find((p) => p.id === id);
         if (!person) return;
         const val = e.target.type === "number" ? Number(e.target.value) : e.target.value;
         if (bind === "employer") person.employerContribs[year] = val;
         else if (bind === "personal") person.personalContribs[year] = val;
+        else if (bind === "payg") person.paygIncome[key] = val;
+        else if (bind === "business") person.businessIncome[key] = val;
+        else if (bind === "deduction") person.deductions[key] = val;
         else person[bind] = val;
+        C.recomputePerson(person);
         saveState();
         renderAll();
       });

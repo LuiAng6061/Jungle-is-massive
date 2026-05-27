@@ -42,15 +42,57 @@ window.PlannerData = (() => {
   // Carry-forward planning years — the 5 lookback years for 2025-26 contributions.
   const CARRY_FORWARD_YEARS = ["2020-21", "2021-22", "2022-23", "2023-24", "2024-25"];
 
-  // Default people from the source spreadsheet.
+  // ATO Individual tax return — PAYG income items (1-3).
+  const PAYG_ITEMS = [
+    { key: "item1",  label: "Salary or wages (Item 1)" },
+    { key: "item2",  label: "Allowances, earnings, tips, director's fees (Item 2)" },
+    { key: "item3",  label: "Employer lump sum payments A & B (Item 3)" },
+  ];
+
+  // ATO Individual tax return — Business / partnership / trust income (Items 13, 15).
+  const BUSINESS_ITEMS = [
+    { key: "item13", label: "Partnership/trust distributions — non-PSI (Item 13)" },
+    { key: "item15a", label: "Net income — primary production (Item 15A)" },
+    { key: "item15b", label: "Net income — non-primary production (Item 15B)" },
+  ];
+
+  // ATO Individual tax return — Deductions D1 through D15. D12 is the
+  // personal super deduction which is modelled by the strategy comparison,
+  // so we keep it visible but read-only.
+  const DEDUCTION_ITEMS = [
+    { key: "D1",  label: "D1 Work-related car expenses" },
+    { key: "D2",  label: "D2 Work-related travel expenses" },
+    { key: "D3",  label: "D3 Work-related clothing, laundry & dry-cleaning" },
+    { key: "D4",  label: "D4 Work-related self-education expenses" },
+    { key: "D5",  label: "D5 Other work-related expenses" },
+    { key: "D6",  label: "D6 Low value pool deduction" },
+    { key: "D7",  label: "D7 Interest deductions" },
+    { key: "D8",  label: "D8 Dividend deductions" },
+    { key: "D9",  label: "D9 Gifts or donations" },
+    { key: "D10", label: "D10 Cost of managing tax affairs" },
+    { key: "D11", label: "D11 Deductible UPP of foreign pension or annuity" },
+    { key: "D12", label: "D12 Personal superannuation contributions (set in Strategy)", readOnly: true },
+    { key: "D13", label: "D13 Deduction for project pool" },
+    { key: "D14", label: "D14 Forestry managed investment scheme" },
+    { key: "D15", label: "D15 Other deductions" },
+  ];
+
+  const emptyPayg = () => Object.fromEntries(PAYG_ITEMS.map((i) => [i.key, 0]));
+  const emptyBusiness = () => Object.fromEntries(BUSINESS_ITEMS.map((i) => [i.key, 0]));
+  const emptyDeductions = () => Object.fromEntries(DEDUCTION_ITEMS.map((i) => [i.key, 0]));
+
+  // Default people from the source spreadsheet — populated with PAYG only.
   const DEFAULT_PEOPLE = [
     {
       id: "p1",
       name: "Ljupco",
-      taxableIncome: 200000,
       paygWithheld: 59000,
       tsb: 350000,
-      employerContribs: { // 11.5% SG approx of income examples (editable)
+      paygIncome: { ...emptyPayg(), item1: 200000 },
+      businessIncome: emptyBusiness(),
+      deductions: emptyDeductions(),
+      taxableIncome: 200000, // derived, kept in sync by calc.recomputePerson
+      employerContribs: {
         "2020-21": 19000,
         "2021-22": 21000,
         "2022-23": 22000,
@@ -68,9 +110,12 @@ window.PlannerData = (() => {
     {
       id: "p2",
       name: "Julie",
-      taxableIncome: 220000,
       paygWithheld: 16451,
       tsb: 280000,
+      paygIncome: { ...emptyPayg(), item1: 220000 },
+      businessIncome: emptyBusiness(),
+      deductions: emptyDeductions(),
+      taxableIncome: 220000,
       employerContribs: {
         "2020-21": 18000,
         "2021-22": 20000,
@@ -112,7 +157,13 @@ window.PlannerData = (() => {
     COMPANY_BASE_RATE,
     COMPANY_FULL_RATE,
     CARRY_FORWARD_YEARS,
+    PAYG_ITEMS,
+    BUSINESS_ITEMS,
+    DEDUCTION_ITEMS,
     DEFAULT_PEOPLE,
     DEFAULT_PROPERTY,
+    emptyPayg,
+    emptyBusiness,
+    emptyDeductions,
   };
 })();

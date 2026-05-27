@@ -32,6 +32,29 @@ window.PlannerCalc = (() => {
     return brackets[brackets.length - 1].rate + D.MEDICARE_LEVY;
   }
 
+  // Sum the values of an object's numeric keys.
+  function sumValues(obj) {
+    return Object.values(obj || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+  }
+
+  // Derive PAYG, business, deductions, and taxable income from the return-form components.
+  function computePersonIncome(person) {
+    const payg = sumValues(person.paygIncome);
+    const business = sumValues(person.businessIncome);
+    const grossIncome = payg + business;
+    const deductions = sumValues(person.deductions);
+    const taxableIncome = Math.max(0, grossIncome - deductions);
+    return { payg, business, grossIncome, deductions, taxableIncome };
+  }
+
+  // Keep person.taxableIncome consistent with the components (mutates).
+  function recomputePerson(person) {
+    if (person.paygIncome || person.businessIncome || person.deductions) {
+      person.taxableIncome = computePersonIncome(person).taxableIncome;
+    }
+    return person;
+  }
+
   // Total concessional contributions used by a person in a year (employer + personal deductible).
   function totalUsedInYear(person, year) {
     const emp = person.employerContribs?.[year] || 0;
@@ -263,6 +286,9 @@ window.PlannerCalc = (() => {
     medicareLevy,
     totalTax,
     marginalRate,
+    sumValues,
+    computePersonIncome,
+    recomputePerson,
     totalUsedInYear,
     carryForwardAvailable,
     computePersonStrategy,
