@@ -27,6 +27,12 @@ window.PlannerData = (() => {
   ];
 
   const MEDICARE_LEVY = 0.02;
+  // FY 2024-25 Medicare levy low-income thresholds (single, general).
+  // Below LOW: no Medicare. Phase-in between LOW and HIGH at 10c per dollar.
+  // Above HIGH: full 2%. HIGH ≈ LOW / (1 − levy/phase) = LOW / 0.8.
+  const MEDICARE_LEVY_LOW = 27222;
+  const MEDICARE_LEVY_HIGH = 34027;
+  const MEDICARE_LEVY_PHASE_RATE = 0.10;
   const CONTRIBUTIONS_TAX = 0.15;
   // Div 293 — additional 15% on concessional contributions if Div 293 income > threshold.
   const DIV_293_THRESHOLD = 250000;
@@ -150,6 +156,9 @@ window.PlannerData = (() => {
     CONCESSIONAL_CAPS,
     TAX_BRACKETS_2024_25,
     MEDICARE_LEVY,
+    MEDICARE_LEVY_LOW,
+    MEDICARE_LEVY_HIGH,
+    MEDICARE_LEVY_PHASE_RATE,
     CONTRIBUTIONS_TAX,
     DIV_293_THRESHOLD,
     DIV_293_EXTRA,

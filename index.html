@@ -191,6 +191,17 @@
         </div>
 
         <div class="card">
+          <h3>Medicare levy</h3>
+          <div class="grid grid-4">
+            <div class="field"><label>Levy rate (full)</label><input type="number" step="0.001" id="medicare-levy-rate" /></div>
+            <div class="field"><label>Low-income threshold (no levy below)</label><input type="number" id="medicare-levy-low" /></div>
+            <div class="field"><label>Upper threshold (full levy above)</label><input type="number" id="medicare-levy-high" /></div>
+            <div class="field"><label>Phase-in rate (between thresholds)</label><input type="number" step="0.001" id="medicare-levy-phase" /></div>
+          </div>
+          <div class="hint">FY 2024-25 single-rate defaults: 2% full levy, $27,222 lower threshold, $34,027 upper threshold, 10c per dollar phase-in. Below $27,222 no Medicare levy applies; effective tax rate is 0% — not 2%.</div>
+        </div>
+
+        <div class="card">
           <h3>Marginal tax brackets</h3>
           <table id="brackets-table">
             <thead><tr><th>Up to</th><th>Marginal rate</th><th>Tax at start of bracket</th></tr></thead>

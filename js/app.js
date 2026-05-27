@@ -46,8 +46,16 @@
     activePersonId: "p1",
     brackets: structuredClone(D.TAX_BRACKETS_2024_25),
     medicareLevy: D.MEDICARE_LEVY,
+    medicareLevyLow: D.MEDICARE_LEVY_LOW,
+    medicareLevyHigh: D.MEDICARE_LEVY_HIGH,
+    medicareLevyPhaseRate: D.MEDICARE_LEVY_PHASE_RATE,
   };
   const state = initial;
+  // Sync any persisted Medicare parameters back into the calc-module constants.
+  if (state.medicareLevy !== undefined) D.MEDICARE_LEVY = state.medicareLevy;
+  if (state.medicareLevyLow !== undefined) D.MEDICARE_LEVY_LOW = state.medicareLevyLow;
+  if (state.medicareLevyHigh !== undefined) D.MEDICARE_LEVY_HIGH = state.medicareLevyHigh;
+  if (state.medicareLevyPhaseRate !== undefined) D.MEDICARE_LEVY_PHASE_RATE = state.medicareLevyPhaseRate;
   state.people.forEach(C.recomputePerson);
 
   // ----- Helpers -----
@@ -623,6 +631,24 @@
       saveState();
       renderAll();
     };
+
+    $("#medicare-levy-rate").value = state.medicareLevy;
+    $("#medicare-levy-low").value = state.medicareLevyLow;
+    $("#medicare-levy-high").value = state.medicareLevyHigh;
+    $("#medicare-levy-phase").value = state.medicareLevyPhaseRate;
+    const bindML = (id, key, dKey) => {
+      $(id).onchange = (e) => {
+        const v = Number(e.target.value);
+        state[key] = v;
+        D[dKey] = v;
+        saveState();
+        renderAll();
+      };
+    };
+    bindML("#medicare-levy-rate", "medicareLevy", "MEDICARE_LEVY");
+    bindML("#medicare-levy-low", "medicareLevyLow", "MEDICARE_LEVY_LOW");
+    bindML("#medicare-levy-high", "medicareLevyHigh", "MEDICARE_LEVY_HIGH");
+    bindML("#medicare-levy-phase", "medicareLevyPhaseRate", "MEDICARE_LEVY_PHASE_RATE");
 
     $("#reset-btn").onclick = () => {
       if (confirm("Reset all data to defaults? Your edits will be lost.")) {

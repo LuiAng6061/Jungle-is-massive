@@ -15,21 +15,36 @@ window.PlannerCalc = (() => {
     return 0;
   }
 
-  function medicareLevy(income, rate = D.MEDICARE_LEVY) {
-    // Simplified — ignores low-income threshold tapering.
-    return Math.max(0, income) * rate;
+  // Medicare levy with the FY 2024-25 low-income threshold.
+  //   income ≤ LOW           → 0
+  //   LOW < income < HIGH    → phase-in at 10c per dollar above LOW
+  //   income ≥ HIGH          → full 2% of income
+  function medicareLevy(income) {
+    const i = Math.max(0, income);
+    const lo = D.MEDICARE_LEVY_LOW;
+    const hi = D.MEDICARE_LEVY_HIGH;
+    if (i <= lo) return 0;
+    if (i >= hi) return i * D.MEDICARE_LEVY;
+    return (i - lo) * D.MEDICARE_LEVY_PHASE_RATE;
   }
 
   function totalTax(income, brackets) {
     return incomeTax(income, brackets) + medicareLevy(income);
   }
 
-  // Marginal rate including Medicare for a given income.
+  // Marginal rate at a given income = income-tax bracket rate + Medicare marginal.
+  // Medicare marginal is 0 below LOW, 10% in the phase-in zone, and 2% above HIGH.
   function marginalRate(income, brackets) {
+    const i = Math.max(0, income);
+    let bracketRate = brackets[brackets.length - 1].rate;
     for (const b of brackets) {
-      if (income <= b.upTo) return b.rate + D.MEDICARE_LEVY;
+      if (i <= b.upTo) { bracketRate = b.rate; break; }
     }
-    return brackets[brackets.length - 1].rate + D.MEDICARE_LEVY;
+    let medicareMarginal;
+    if (i < D.MEDICARE_LEVY_LOW) medicareMarginal = 0;
+    else if (i >= D.MEDICARE_LEVY_HIGH) medicareMarginal = D.MEDICARE_LEVY;
+    else medicareMarginal = D.MEDICARE_LEVY_PHASE_RATE;
+    return bracketRate + medicareMarginal;
   }
 
   // Sum the values of an object's numeric keys.
