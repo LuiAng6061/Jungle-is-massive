@@ -150,6 +150,8 @@ window.PlannerData = (() => {
     isCgtEligible: false, // development is generally on revenue account
     trustDistribution: { ljupco: 0.20, julie: 0.20, bucket: 0.60 },
     bucketRate: 0.25,
+    bucketDistributeMode: "distribute", // "distribute" applies imputation top-up; "retain" leaves at 25%
+    bucketShareholders: { p1: 0.5, p2: 0.5 },
   };
 
   return {

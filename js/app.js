@@ -188,6 +188,71 @@
 
     const dashTarget = document.getElementById("dash-target-display");
     if (dashTarget) dashTarget.textContent = target;
+
+    renderRecommendations();
+  }
+
+  // Compute and display the tax-minimising personal-deductible contribution
+  // for each member, plus a combined recommendation.
+  function renderRecommendations() {
+    const target = state.targetYear;
+    const wrap = $("#dashboard-recommendations");
+    if (!wrap) return;
+    let combinedRec = 0;
+    let combinedSaving = 0;
+    let combinedNet = 0;
+    const perPerson = state.people.map((p) => {
+      const built = C.buildStrategies(p, state.customContribs[p.id], state.caps, target);
+      const opt = C.optimiseContribution(p, built.maxContrib, state.brackets);
+      const recommend = opt.optimal;
+      const recommendResult = C.computePersonStrategy(p, recommend, state.brackets);
+      combinedRec += recommend;
+      combinedSaving += recommendResult.taxSaving;
+      combinedNet += recommendResult.netBenefit;
+      return { person: p, built, recommend, result: recommendResult };
+    });
+
+    wrap.innerHTML = `
+      <div class="grid grid-3" style="margin-bottom:14px;">
+        <div class="kpi good"><div class="label">Recommended contribution (combined)</div>
+          <div class="value">${money(combinedRec)}</div>
+          <div class="delta">Tax-minimising personal-deductible amount</div></div>
+        <div class="kpi"><div class="label">Tax saved if you contribute</div>
+          <div class="value">${money(combinedSaving)}</div>
+          <div class="delta">Before 15% contributions tax</div></div>
+        <div class="kpi good"><div class="label">Net benefit after super tax</div>
+          <div class="value">${money(combinedNet)}</div>
+          <div class="delta">Cash-in-hand improvement vs no contribution</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Member</th><th>Available cap</th><th>Employer SG</th><th>Recommended personal</th><th>Tax saving</th><th>Contributions tax</th><th>Net benefit</th></tr></thead>
+        <tbody>
+          ${perPerson.map(({ person, built, recommend, result }) => `
+            <tr>
+              <td><strong>${person.name}</strong></td>
+              <td>${money(built.cf.totalAvailable)}</td>
+              <td>${money(built.employerThisYear)}</td>
+              <td><strong>${money(recommend)}</strong>${recommend >= built.maxContrib && built.maxContrib > 0 ? ' <span class="chip good">at cap</span>' : ""}</td>
+              <td>${money(result.taxSaving)}</td>
+              <td>${money(result.contributionsTax)}</td>
+              <td><strong>${money(result.netBenefit)}</strong></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;">
+        <button class="btn accent" id="apply-recommendations-btn">Apply recommendation to all members</button>
+        <span class="hint" style="align-self:center;">Sets each member's custom contribution to the optimal amount and updates every tab.</span>
+      </div>
+    `;
+
+    $("#apply-recommendations-btn").onclick = () => {
+      perPerson.forEach(({ person, recommend }) => {
+        state.customContribs[person.id] = recommend;
+      });
+      saveState();
+      renderAll();
+    };
   }
 
   function bestStructureLabel(m) {
@@ -490,6 +555,9 @@
   // ----- Property page -----
   function renderProperty() {
     const prop = state.property;
+    if (!prop.bucketDistributeMode) prop.bucketDistributeMode = "distribute";
+    if (!prop.bucketShareholders) prop.bucketShareholders = { p1: 0.5, p2: 0.5 };
+
     const fields = $("#property-inputs");
     fields.innerHTML = `
       <div class="field-row">
@@ -507,7 +575,16 @@
             <option value="0.30" ${prop.bucketRate === 0.30 ? "selected" : ""}>30% full rate</option>
           </select>
         </div>
-        <div class="field"><label>Year</label><input type="text" data-pkey="year" value="${prop.year}"/></div>
+        <div class="field"><label>Bucket co distribution scenario</label>
+          <select data-pkey="bucketDistributeMode">
+            <option value="distribute" ${prop.bucketDistributeMode === "distribute" ? "selected" : ""}>Distribute as franked dividend (apples-to-apples)</option>
+            <option value="retain" ${prop.bucketDistributeMode === "retain" ? "selected" : ""}>Retain in company (defer tax)</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Bucket shareholder — ${state.people[0]?.name || "Person 1"} (%)</label><input type="number" data-pkey="shr.p1" value="${((prop.bucketShareholders.p1 || 0) * 100).toFixed(0)}"/></div>
+        <div class="field"><label>Bucket shareholder — ${state.people[1]?.name || "Person 2"} (%)</label><input type="number" data-pkey="shr.p2" value="${((prop.bucketShareholders.p2 || 0) * 100).toFixed(0)}"/></div>
       </div>
       <h4 style="margin:14px 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Trust distribution (must total 100%)</h4>
       <div class="field-row">
@@ -518,17 +595,21 @@
         <label>Bucket company (%)</label>
         <input type="number" data-pkey="dist.bucket" value="${(prop.trustDistribution.bucket * 100).toFixed(0)}"/>
       </div>
+      <div class="field"><label>Year</label><input type="text" data-pkey="year" value="${prop.year}"/></div>
     `;
 
     $$("#property-inputs input, #property-inputs select").forEach((el) => {
       el.addEventListener("change", (e) => {
         const key = e.target.dataset.pkey;
-        const val = e.target.type === "number" || e.target.tagName === "SELECT" ? Number(e.target.value) : e.target.value;
+        const isNumeric = e.target.type === "number";
         if (key === "year") prop.year = e.target.value;
-        else if (key === "dist.ljupco") prop.trustDistribution.ljupco = val / 100;
-        else if (key === "dist.julie") prop.trustDistribution.julie = val / 100;
-        else if (key === "dist.bucket") prop.trustDistribution.bucket = val / 100;
-        else prop[key] = val;
+        else if (key === "bucketDistributeMode") prop.bucketDistributeMode = e.target.value;
+        else if (key === "dist.ljupco") prop.trustDistribution.ljupco = Number(e.target.value) / 100;
+        else if (key === "dist.julie") prop.trustDistribution.julie = Number(e.target.value) / 100;
+        else if (key === "dist.bucket") prop.trustDistribution.bucket = Number(e.target.value) / 100;
+        else if (key === "shr.p1") prop.bucketShareholders.p1 = Number(e.target.value) / 100;
+        else if (key === "shr.p2") prop.bucketShareholders.p2 = Number(e.target.value) / 100;
+        else prop[key] = isNumeric ? Number(e.target.value) : e.target.value;
         saveState();
         renderProperty();
       });
@@ -536,6 +617,7 @@
 
     const model = C.modelPropertyDevelopment(prop, state.people, state.brackets);
     const distTotal = prop.trustDistribution.ljupco + prop.trustDistribution.julie + prop.trustDistribution.bucket;
+    const shrTotal = (prop.bucketShareholders.p1 || 0) + (prop.bucketShareholders.p2 || 0);
 
     $("#property-kpis").innerHTML = `
       <div class="kpi"><div class="label">Gross profit</div><div class="value">${money(model.grossProfit)}</div></div>
@@ -544,18 +626,25 @@
       <div class="kpi"><div class="label">Bucket co — net after tax</div><div class="value">${money(model.company.netProfit)}</div><div class="delta">Effective rate ${pct(model.company.effectiveRate)}</div></div>
     `;
 
-    let alertHtml = "";
+    const alerts = [];
     if (Math.abs(distTotal - 1) > 0.001) {
-      alertHtml = `<div class="alert bad">Trust distribution totals ${(distTotal * 100).toFixed(0)}%, not 100%. Adjust the percentages.</div>`;
-    } else {
+      alerts.push(`<div class="alert bad">Trust distribution totals ${(distTotal * 100).toFixed(0)}%, not 100%. Adjust the percentages.</div>`);
+    }
+    if (Math.abs(shrTotal - 1) > 0.001) {
+      alerts.push(`<div class="alert warn">Bucket co shareholder split totals ${(shrTotal * 100).toFixed(0)}%, not 100%. Adjust the split.</div>`);
+    }
+    if (alerts.length === 0) {
       const ranking = [
         { name: "Personal (50/50)", v: model.personal.netProfit },
         { name: "Discretionary trust", v: model.trust.netProfit },
         { name: "100% bucket company", v: model.company.netProfit },
       ].sort((a, b) => b.v - a.v);
-      alertHtml = `<div class="alert info">Optimal structure: <strong>${ranking[0].name}</strong> (${money(ranking[0].v)} net) — ${money(ranking[0].v - ranking[2].v)} better than the worst option. Note: bucket co retains cash; eventual unfranked distribution reduces effective benefit when paid out.</div>`;
+      const modeNote = model.distributeBucket
+        ? "Bucket co tax shown <strong>after franked dividend distribution</strong> — under imputation this equals the shareholders' marginal tax, so bucket co only wins on income-splitting (distributing to lower-marginal beneficiaries), not as a flat 25% rate."
+        : "Bucket co tax shown as <strong>company tax only (retained earnings)</strong> — the 25% looks attractive but a top-up of (marginal − 25%) applies whenever earnings are eventually distributed.";
+      alerts.push(`<div class="alert info">Optimal structure: <strong>${ranking[0].name}</strong> (${money(ranking[0].v)} net) — ${money(ranking[0].v - ranking[2].v)} better than the worst. ${modeNote}</div>`);
     }
-    $("#property-alert").innerHTML = alertHtml;
+    $("#property-alert").innerHTML = alerts.join("");
 
     $("#property-detail").innerHTML = `
       <div class="grid grid-3">
@@ -566,20 +655,22 @@
             <div class="card">
               <h3>${title}</h3>
               <table>
-                <thead><tr><th>Beneficiary</th><th>Share</th><th>Tax</th><th>Effective</th></tr></thead>
+                <thead><tr><th>Beneficiary</th><th>Share</th><th>Entity tax</th><th>Dist'n top-up</th><th>Total tax</th><th>Eff. rate</th></tr></thead>
                 <tbody>
                   ${m.results.map((r) => `
-                    <tr><td>${r.name}</td><td>${money(r.share)}</td><td>${money(r.marginalTax)}</td><td>${pct(r.effectiveRate)}</td></tr>
+                    <tr><td>${r.name}</td><td>${money(r.share)}</td><td>${money(r.entityTax || 0)}</td><td>${money(r.distributionTopUp || 0)}</td><td>${money(r.totalTax)}</td><td>${pct(r.effectiveRate)}</td></tr>
                   `).join("")}
                   <tr class="highlight">
                     <td><strong>Total</strong></td>
                     <td>${money(model.grossProfit)}</td>
+                    <td>${money(m.results.reduce((s, r) => s + (r.entityTax || 0), 0))}</td>
+                    <td>${money(m.results.reduce((s, r) => s + (r.distributionTopUp || 0), 0))}</td>
                     <td><strong>${money(m.totalTax)}</strong></td>
                     <td>${pct(m.effectiveRate)}</td>
                   </tr>
                   <tr class="good-row">
                     <td><strong>Net profit</strong></td>
-                    <td colspan="3"><strong>${money(m.netProfit)}</strong></td>
+                    <td colspan="5"><strong>${money(m.netProfit)}</strong></td>
                   </tr>
                 </tbody>
               </table>

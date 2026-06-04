@@ -163,15 +163,18 @@ window.PlannerCalc = (() => {
   function optimiseContribution(person, maxContrib, brackets = D.TAX_BRACKETS_2024_25) {
     if (maxContrib <= 0) return { optimal: 0, net: 0 };
     let best = { optimal: 0, net: 0 };
-    const step = Math.max(100, Math.round(maxContrib / 200));
+    const step = Math.max(50, Math.round(maxContrib / 500));
     for (let c = 0; c <= maxContrib; c += step) {
       const r = computePersonStrategy(person, c, brackets);
       if (r.netBenefit > best.net) best = { optimal: c, net: r.netBenefit };
     }
-    // Refine at the best point with finer step.
+    // Always test the cap itself — for high earners the optimum sits exactly there.
+    const cap = computePersonStrategy(person, maxContrib, brackets);
+    if (cap.netBenefit > best.net) best = { optimal: maxContrib, net: cap.netBenefit };
+    // Refine ±step in $1 increments around the best candidate.
     const lo = Math.max(0, best.optimal - step);
     const hi = Math.min(maxContrib, best.optimal + step);
-    for (let c = lo; c <= hi; c += 25) {
+    for (let c = lo; c <= hi; c += 1) {
       const r = computePersonStrategy(person, c, brackets);
       if (r.netBenefit > best.net) best = { optimal: c, net: r.netBenefit };
     }
@@ -196,6 +199,12 @@ window.PlannerCalc = (() => {
   }
 
   // Property development — three ownership comparisons.
+  // For the company-owned slices (100% bucket co; trust's bucket share) we
+  // model the franking-credit consequence of distributing those retained
+  // earnings to the shareholder(s). Under full imputation, distributing to
+  // a top-marginal-rate shareholder gives the same effective tax as direct
+  // personal ownership. Set property.bucketDistributeMode to "retain" to
+  // see the deferred-tax benefit instead.
   function modelPropertyDevelopment(property, people, brackets = D.TAX_BRACKETS_2024_25) {
     const grossProfit =
       property.saleProceeds -
@@ -203,20 +212,55 @@ window.PlannerCalc = (() => {
       property.constructionCost -
       property.otherCosts;
 
+    const distributeBucket = (property.bucketDistributeMode || "distribute") === "distribute";
+    const shareholders = property.bucketShareholders || { p1: 0.5, p2: 0.5 };
+    const bucketRate = property.bucketRate;
+
+    function marginalAdditionalTax(person, additional) {
+      if (!person || additional <= 0) return 0;
+      const base = person.taxableIncome || 0;
+      return totalTax(base + additional, brackets) - totalTax(base, brackets);
+    }
+
+    // Eventual tax on a slice of profit sitting in the bucket co.
+    // If retained: just the company tax (bucketRate × slice).
+    // If distributed as a fully franked dividend: the franking system means
+    // total tax = sum over shareholders of marginalTaxOn(grossedUpShare),
+    // where grossedUpShare = slice × shareholderFraction. The company tax
+    // forms part of that total via the franking credit; the shareholder
+    // tops up (or is refunded) the difference.
+    function bucketTaxOnSlice(slice) {
+      const entityTax = slice * bucketRate;
+      if (!distributeBucket) {
+        return { entityTax, distributionTopUp: 0, totalTax: entityTax };
+      }
+      let totalShareholderTax = 0;
+      Object.entries(shareholders).forEach(([pid, frac]) => {
+        const person = people.find((p) => p.id === pid);
+        const personalSlice = slice * (frac || 0);
+        totalShareholderTax += marginalAdditionalTax(person, personalSlice);
+      });
+      return {
+        entityTax,
+        distributionTopUp: totalShareholderTax - entityTax,
+        totalTax: totalShareholderTax,
+      };
+    }
+
     // 1) Personal ownership (50/50 split between the two people).
     const splitProfit = grossProfit / 2;
     const personalResults = people.slice(0, 2).map((p) => {
-      const totalIncome = p.taxableIncome + splitProfit;
-      const taxWith = totalTax(totalIncome, brackets);
-      const taxWithout = totalTax(p.taxableIncome, brackets);
+      const mt = marginalAdditionalTax(p, splitProfit);
       return {
         name: p.name,
         share: splitProfit,
-        marginalTax: taxWith - taxWithout,
-        effectiveRate: splitProfit > 0 ? (taxWith - taxWithout) / splitProfit : 0,
+        entityTax: 0,
+        distributionTopUp: 0,
+        totalTax: mt,
+        effectiveRate: splitProfit > 0 ? mt / splitProfit : 0,
       };
     });
-    const personalTotalTax = personalResults.reduce((s, r) => s + r.marginalTax, 0);
+    const personalTotalTax = personalResults.reduce((s, r) => s + r.totalTax, 0);
     const personalNet = grossProfit - personalTotalTax;
 
     // 2) Discretionary trust — streams to beneficiaries per property.trustDistribution.
@@ -227,43 +271,55 @@ window.PlannerCalc = (() => {
 
     const trustResults = [];
     if (people[0]) {
-      const totalIncome = people[0].taxableIncome + ljupcoShare;
-      const t1 = totalTax(totalIncome, brackets);
-      const t0 = totalTax(people[0].taxableIncome, brackets);
+      const mt = marginalAdditionalTax(people[0], ljupcoShare);
       trustResults.push({
         name: `${people[0].name} (trust)`,
         share: ljupcoShare,
-        marginalTax: t1 - t0,
-        effectiveRate: ljupcoShare > 0 ? (t1 - t0) / ljupcoShare : 0,
+        entityTax: 0,
+        distributionTopUp: 0,
+        totalTax: mt,
+        effectiveRate: ljupcoShare > 0 ? mt / ljupcoShare : 0,
       });
     }
     if (people[1]) {
-      const totalIncome = people[1].taxableIncome + julieShare;
-      const t1 = totalTax(totalIncome, brackets);
-      const t0 = totalTax(people[1].taxableIncome, brackets);
+      const mt = marginalAdditionalTax(people[1], julieShare);
       trustResults.push({
         name: `${people[1].name} (trust)`,
         share: julieShare,
-        marginalTax: t1 - t0,
-        effectiveRate: julieShare > 0 ? (t1 - t0) / julieShare : 0,
+        entityTax: 0,
+        distributionTopUp: 0,
+        totalTax: mt,
+        effectiveRate: julieShare > 0 ? mt / julieShare : 0,
       });
     }
-    const bucketTax = bucketShare * property.bucketRate;
+    const bucketSlice = bucketTaxOnSlice(bucketShare);
     trustResults.push({
-      name: `Bucket co (${(property.bucketRate * 100).toFixed(0)}%)`,
+      name: `Bucket co${distributeBucket ? " (distributed)" : " (retained)"}`,
       share: bucketShare,
-      marginalTax: bucketTax,
-      effectiveRate: property.bucketRate,
+      entityTax: bucketSlice.entityTax,
+      distributionTopUp: bucketSlice.distributionTopUp,
+      totalTax: bucketSlice.totalTax,
+      effectiveRate: bucketShare > 0 ? bucketSlice.totalTax / bucketShare : 0,
     });
-    const trustTotalTax = trustResults.reduce((s, r) => s + r.marginalTax, 0);
+    const trustTotalTax = trustResults.reduce((s, r) => s + r.totalTax, 0);
     const trustNet = grossProfit - trustTotalTax;
 
     // 3) 100% bucket company.
-    const companyTax = grossProfit * property.bucketRate;
-    const companyNet = grossProfit - companyTax;
+    const companySlice = bucketTaxOnSlice(grossProfit);
+    const companyResults = [{
+      name: distributeBucket ? "Bucket co (distributed to shareholders)" : "Bucket co (retained)",
+      share: grossProfit,
+      entityTax: companySlice.entityTax,
+      distributionTopUp: companySlice.distributionTopUp,
+      totalTax: companySlice.totalTax,
+      effectiveRate: grossProfit > 0 ? companySlice.totalTax / grossProfit : 0,
+    }];
+    const companyTotalTax = companySlice.totalTax;
+    const companyNet = grossProfit - companyTotalTax;
 
     return {
       grossProfit,
+      distributeBucket,
       personal: {
         results: personalResults,
         totalTax: personalTotalTax,
@@ -277,10 +333,10 @@ window.PlannerCalc = (() => {
         effectiveRate: grossProfit > 0 ? trustTotalTax / grossProfit : 0,
       },
       company: {
-        results: [{ name: "Bucket company only", share: grossProfit, marginalTax: companyTax, effectiveRate: property.bucketRate }],
-        totalTax: companyTax,
+        results: companyResults,
+        totalTax: companyTotalTax,
         netProfit: companyNet,
-        effectiveRate: property.bucketRate,
+        effectiveRate: grossProfit > 0 ? companyTotalTax / grossProfit : 0,
       },
     };
   }
