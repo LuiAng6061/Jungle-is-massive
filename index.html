@@ -18,6 +18,7 @@
         <li data-page="income"><span class="dot"></span>Income & deductions</li>
         <li data-page="carryforward"><span class="dot"></span>Carry-forward cap</li>
         <li data-page="strategy"><span class="dot"></span>Strategy comparison</li>
+        <li data-page="div293"><span class="dot"></span>Division 293</li>
         <li data-page="property"><span class="dot"></span>Property (2026-27)</li>
         <li data-page="assumptions"><span class="dot"></span>Assumptions</li>
       </ul>
@@ -131,6 +132,25 @@
           <div class="chart-wrap tall"><canvas id="savingsCurveChart"></canvas></div>
           <div class="hint">Net benefit peaks where each additional dollar of contribution still attracts a higher marginal tax saving than the 15% (or 30% with Div 293) contributions tax.</div>
         </div>
+      </section>
+
+      <!-- DIVISION 293 -->
+      <section id="page-div293" class="page">
+        <div class="page-header">
+          <div>
+            <h2>Division 293</h2>
+            <p>Determine whether the additional 15% Div 293 tax applies, see why, and review concrete strategies to avoid or minimise it.</p>
+          </div>
+        </div>
+        <div class="alert info">
+          Div 293 applies when <em>(taxable income after deductions) + (total concessional contributions)</em>
+          exceeds <strong>$250,000</strong>. The extra 15% is charged on the lesser of:
+          (a) low-tax contributions, or (b) the excess over the threshold.
+          Div 293 income is simplified to taxable income here — reportable fringe benefits,
+          net investment/rental losses and other items can push real Div 293 income higher.
+        </div>
+        <div class="grid grid-4" id="div293-kpis"></div>
+        <div id="div293-content"></div>
       </section>
 
       <!-- PROPERTY -->

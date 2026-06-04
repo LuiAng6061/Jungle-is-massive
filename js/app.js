@@ -100,7 +100,7 @@
       if (!cf.eligibleByTsb) warnings++;
       const employer = p.employerContribs?.[target] || 0;
       const maxContrib = Math.max(0, cf.totalAvailable - employer);
-      const r = C.computePersonStrategy(p, maxContrib, state.brackets);
+      const r = C.computePersonStrategy(p, maxContrib, state.brackets, employer);
       totalNetBenefit += r.netBenefit;
       totalTaxSavingMax += r.taxSaving;
     });
@@ -130,7 +130,7 @@
     // Combine across people
     const combined = keys.map(() => ({ contribution: 0, taxBefore: 0, taxAfter: 0, taxSaving: 0, contributionsTax: 0, netBenefit: 0 }));
     state.people.forEach((p) => {
-      const built = C.buildStrategies(p, state.customContribs[p.id], state.caps, target);
+      const built = C.buildStrategies(p, state.customContribs[p.id], state.caps, target, state.brackets);
       keys.forEach((k, i) => {
         const s = built.strategies[k];
         combined[i].contribution += s.contribution;
@@ -202,10 +202,10 @@
     let combinedSaving = 0;
     let combinedNet = 0;
     const perPerson = state.people.map((p) => {
-      const built = C.buildStrategies(p, state.customContribs[p.id], state.caps, target);
-      const opt = C.optimiseContribution(p, built.maxContrib, state.brackets);
+      const built = C.buildStrategies(p, state.customContribs[p.id], state.caps, target, state.brackets);
+      const opt = C.optimiseContribution(p, built.maxContrib, state.brackets, built.employerThisYear);
       const recommend = opt.optimal;
-      const recommendResult = C.computePersonStrategy(p, recommend, state.brackets);
+      const recommendResult = C.computePersonStrategy(p, recommend, state.brackets, built.employerThisYear);
       combinedRec += recommend;
       combinedSaving += recommendResult.taxSaving;
       combinedNet += recommendResult.netBenefit;
@@ -471,7 +471,7 @@
     });
 
     const p = activePerson();
-    const built = C.buildStrategies(p, state.customContribs[p.id], state.caps, state.targetYear);
+    const built = C.buildStrategies(p, state.customContribs[p.id], state.caps, state.targetYear, state.brackets);
     const cf = built.cf;
     const employer = built.employerThisYear;
     const exceed = C.checkCapExceedance(p, state.customContribs[p.id] || 0, state.targetYear, state.caps);
@@ -503,7 +503,7 @@
       renderStrategy();
     });
     $("#optimise-btn").addEventListener("click", () => {
-      const result = C.optimiseContribution(p, built.maxContrib, state.brackets);
+      const result = C.optimiseContribution(p, built.maxContrib, state.brackets, employer);
       state.customContribs[p.id] = result.optimal;
       saveState();
       renderStrategy();
@@ -537,8 +537,9 @@
           <div class="row"><span>Tax before</span><span>${money(s.taxBefore)}</span></div>
           <div class="row"><span>Tax after</span><span>${money(s.taxAfter)}</span></div>
           <div class="row"><span>Tax saving</span><span>${money(s.taxSaving)}</span></div>
-          <div class="row"><span>Contributions tax</span><span>${money(s.contributionsTax)}</span></div>
-          ${s.div293Extra > 0 ? `<div class="row"><span>Div 293 extra (15%)</span><span>${money(s.div293Extra)}</span></div>` : ""}
+          <div class="row"><span>Contributions tax (15%)</span><span>${money(s.contributionsTax)}</span></div>
+          ${s.div293Total > 0 ? `<div class="row"><span>Div 293 (total in scenario)</span><span>${money(s.div293Total)}</span></div>` : ""}
+          ${s.div293Extra > 0 ? `<div class="row"><span>↳ marginal Div 293 vs no contrib</span><span>${money(s.div293Extra)}</span></div>` : ""}
           <div class="row"><span>Refund/(payable) after</span><span>${money(s.refundAfter)}</span></div>
         </div>
       `;
@@ -548,7 +549,7 @@
     Charts.strategyComparison("strategyBarChart", built.strategies);
 
     // Savings curve
-    const curve = C.buildSavingsCurve(p, built.maxContrib, 30, state.brackets);
+    const curve = C.buildSavingsCurve(p, built.maxContrib, 30, state.brackets, employer);
     Charts.savingsCurve("savingsCurveChart", curve, `${p.name}'s personal deductible contribution`);
   }
 
@@ -759,11 +760,191 @@
   }
 
   // ----- Master render -----
+  // ----- Division 293 page -----
+  function renderDiv293() {
+    const wrap = $("#div293-content");
+    if (!wrap) return;
+    const kpiWrap = $("#div293-kpis");
+    const target = state.targetYear;
+
+    const analyses = state.people.map((p) => {
+      const employerSG = p.employerContribs?.[target] || 0;
+      const personalContrib = state.customContribs[p.id] || 0;
+      const personalCapped = Math.min(personalContrib, Math.max(0, (state.caps[target] || 0) + 0));
+      const cur = C.analyzeDiv293(p, personalContrib, employerSG);
+      const noContrib = C.analyzeDiv293(p, 0, employerSG);
+      // Maximum personal contribution before any extra Div 293 hits (compared to baseline).
+      // Once income + employerSG > threshold, every dollar of personal contribution adds
+      // 15c of Div 293 until the contributions cap reaches the excess. Headroom is the
+      // gap between current low-tax contribs and the threshold-driven cap.
+      const personalHeadroomBeforeExtra = noContrib.total < D.DIV_293_THRESHOLD
+        ? D.DIV_293_THRESHOLD - noContrib.total
+        : Math.max(0, noContrib.excess - employerSG);
+      return { person: p, employerSG, personalContrib, cur, noContrib, personalHeadroomBeforeExtra };
+    });
+
+    const totalCurrent = analyses.reduce((s, a) => s + a.cur.tax, 0);
+    const totalBaseline = analyses.reduce((s, a) => s + a.noContrib.tax, 0);
+    const affected = analyses.filter((a) => a.cur.affected).length;
+    const safeHeadroom = analyses.reduce((s, a) => s + Math.max(0, D.DIV_293_THRESHOLD - a.cur.total), 0);
+
+    kpiWrap.innerHTML = `
+      <div class="kpi ${totalCurrent > 0 ? "bad" : "good"}">
+        <div class="label">Total Div 293 tax</div>
+        <div class="value">${money(totalCurrent)}</div>
+        <div class="delta">${affected} of ${analyses.length} member(s) affected</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Div 293 on employer SG alone</div>
+        <div class="value">${money(totalBaseline)}</div>
+        <div class="delta">Unavoidable while income + SG &gt; ${money(D.DIV_293_THRESHOLD)}</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Marginal Div 293 from personal contribs</div>
+        <div class="value">${money(totalCurrent - totalBaseline)}</div>
+        <div class="delta">Caused by the current custom contribution amounts</div>
+      </div>
+      <div class="kpi ${safeHeadroom > 0 ? "good" : ""}">
+        <div class="label">Combined headroom before threshold</div>
+        <div class="value">${money(safeHeadroom)}</div>
+        <div class="delta">Extra income or contributions you can absorb</div>
+      </div>
+    `;
+
+    wrap.innerHTML = analyses.map(({ person, employerSG, personalContrib, cur, noContrib, personalHeadroomBeforeExtra }) => {
+      const baseTotal = person.taxableIncome + employerSG; // total for Div 293 — invariant of personal contrib
+      const baseExcess = Math.max(0, baseTotal - D.DIV_293_THRESHOLD);
+      const sgCapsTheBase = employerSG >= baseExcess && baseTotal > D.DIV_293_THRESHOLD;
+      const personalMarginalRate = C.marginalRate(person.taxableIncome || 0, state.brackets);
+      const netPerDollarAtCap = Math.max(0, (personalMarginalRate - 0.15) * 100); // % at cap
+
+      let statusChip;
+      if (baseTotal <= D.DIV_293_THRESHOLD) {
+        statusChip = `<span class="chip good">Safe — no Div 293</span>`;
+      } else if (sgCapsTheBase) {
+        statusChip = `<span class="chip warn">Affected on SG — personal contrib adds no further Div 293</span>`;
+      } else {
+        statusChip = `<span class="chip bad">Affected — personal contrib adds Div 293 up to ${money(baseExcess - employerSG)}</span>`;
+      }
+
+      const strategies = [];
+
+      if (baseTotal <= D.DIV_293_THRESHOLD) {
+        const headroom = D.DIV_293_THRESHOLD - baseTotal;
+        strategies.push({
+          cls: "good",
+          title: "✓ Div 293 does not apply at any contribution level",
+          body: `Pre-super taxable income (${money(person.taxableIncome)}) + employer SG (${money(employerSG)}) = <strong>${money(baseTotal)}</strong>, which is <strong>${money(headroom)}</strong> below the ${money(D.DIV_293_THRESHOLD)} threshold. Personal deductible contributions don't affect this total (the deduction reduces taxable income by exactly what it adds to low-tax contributions), so you can max your cap without triggering Div 293.`,
+        });
+      } else {
+        strategies.push({
+          cls: "bad",
+          title: `Div 293 of ${money(noContrib.tax)} on employer SG is unavoidable`,
+          body: `Your income (${money(person.taxableIncome)}) + employer SG (${money(employerSG)}) = <strong>${money(baseTotal)}</strong> exceeds the ${money(D.DIV_293_THRESHOLD)} threshold by ${money(baseExcess)}. Personal contributions don't change this total — but they do <strong>increase the taxable-contribution base</strong>, which is what attracts the 15% Div 293.`,
+        });
+
+        if (sgCapsTheBase) {
+          strategies.push({
+            cls: "good",
+            title: "Personal contributions don't increase your Div 293",
+            body: `Your employer SG (${money(employerSG)}) already meets or exceeds the threshold excess (${money(baseExcess)}). The Div 293 base is capped at the excess regardless of personal contribution. Max your cap freely — every dollar still nets ~${netPerDollarAtCap.toFixed(0)}c after 15% contributions tax.`,
+          });
+        } else {
+          const personalBeforeCap = Math.max(0, baseExcess - employerSG);
+          strategies.push({
+            cls: "warn",
+            title: `Each $1 of personal contribution up to ${money(personalBeforeCap)} adds 15c of Div 293`,
+            body: `Beyond ${money(personalBeforeCap)} personal contribution, additional Div 293 stops (the taxable-contribution base hits the excess ${money(baseExcess)}). Even at the full marginal Div 293 hit, top-marginal earners still net ~17c per dollar (47% saving − 15% contributions tax − 15% Div 293), so the optimiser correctly recommends contributing to the cap.`,
+          });
+
+          // Reduce salary sacrifice (only useful if employerSG > mandatory SG ~11.5% of salary)
+          const estMandatorySg = Math.round((person.paygIncome?.item1 || 0) * 0.115);
+          if (employerSG > estMandatorySg + 1000) {
+            strategies.push({
+              cls: "info",
+              title: "Reduce voluntary salary sacrifice to lower employer concessional",
+              body: `Your employer concessional ${money(employerSG)} is above the mandatory SG floor (~${money(estMandatorySg)} at 11.5%). Reducing salary sacrifice lowers low-tax contributions, which can shrink the Div 293 base — though you also lose the 15% contributions-tax benefit on the sacrificed amount.`,
+            });
+          }
+        }
+      }
+
+      // Spouse-shifting strategy — useful any time the other member has Div 293 headroom
+      const otherPeople = state.people.filter((q) => q.id !== person.id);
+      const spouseHeadroom = otherPeople.map((q) => {
+        const empSG = q.employerContribs?.[target] || 0;
+        const otherTotal = (q.taxableIncome || 0) + empSG;
+        return { name: q.name, total: otherTotal, headroom: Math.max(0, D.DIV_293_THRESHOLD - otherTotal) };
+      });
+      const spouseUseful = spouseHeadroom.find((s) => s.headroom > 0);
+      if (baseTotal > D.DIV_293_THRESHOLD && spouseUseful) {
+        strategies.push({
+          cls: "info",
+          title: `Shift contributions to ${spouseUseful.name} — they have ${money(spouseUseful.headroom)} of Div 293 headroom`,
+          body: `Their income + SG = ${money(spouseUseful.total)}, below the threshold. A deductible contribution made through them (subject to their own cap and personal-deductible eligibility) attracts no Div 293. Note: spouse contribution splitting (split-back of up to 85% of last year's contributions) does <em>not</em> reduce your Div 293 — the contribution is still assessed to the original member.`,
+        });
+      }
+
+      // Carry-forward deferral
+      if (baseTotal > D.DIV_293_THRESHOLD) {
+        strategies.push({
+          cls: "info",
+          title: "Defer to a lower-income year via carry-forward",
+          body: `Unused concessional cap carries forward up to 5 years (while TSB &lt; $500k). If you expect a future year with income + SG below ${money(D.DIV_293_THRESHOLD)} (retirement, sabbatical, lower-bonus year), holding off and contributing a larger amount then avoids Div 293 entirely on that contribution.`,
+        });
+      }
+
+      const breakdownRows = [
+        ["Taxable income (pre-super-deduction)", money(person.taxableIncome)],
+        ["Less: personal deductible contribution", `− ${money(personalContrib)}`],
+        ["Tax-return taxable income", money(cur.taxReturnTaxable)],
+        ["Plus: employer concessional contributions", `+ ${money(employerSG)}`],
+        ["Plus: personal concessional contributions", `+ ${money(personalContrib)}`],
+        ["Total low-tax contributions", money(cur.lowTaxContributions)],
+        ["= Total for Div 293 comparison", `<strong>${money(cur.total)}</strong>`],
+        ["Threshold", money(D.DIV_293_THRESHOLD)],
+        ["Excess over threshold", cur.excess > 0 ? `<strong>${money(cur.excess)}</strong>` : "—"],
+        ["Taxable contributions (min of low-tax & excess)", money(cur.taxableContribs)],
+        ["Div 293 tax (15%)", `<strong>${money(cur.tax)}</strong>`],
+      ];
+
+      return `
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+            <h3 style="margin:0">${person.name}</h3>
+            ${statusChip}
+          </div>
+          <div class="grid grid-2" style="margin-top:14px;">
+            <div>
+              <h4 style="margin:0 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Breakdown at current personal contribution ${money(personalContrib)}</h4>
+              <table>
+                <tbody>
+                  ${breakdownRows.map(([k, v]) => `<tr><td>${k}</td><td style="text-align:right">${v}</td></tr>`).join("")}
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <h4 style="margin:0 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">How to avoid or minimise</h4>
+              ${strategies.map((s) => `
+                <div class="alert ${s.cls}" style="margin:6px 0;">
+                  <strong>${s.title}</strong>
+                  <div style="margin-top:4px;">${s.body}</div>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+
   function renderAll() {
     renderDashboard();
     renderPeople();
     renderCarryForward();
     renderStrategy();
+    renderDiv293();
     renderProperty();
     renderAssumptions();
   }

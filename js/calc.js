@@ -101,25 +101,60 @@ window.PlannerCalc = (() => {
     };
   }
 
+  // Division 293 — additional 15% tax on a high-income earner's low-tax
+  // (concessional) contributions. The ATO formula:
+  //   Div 293 income = taxable income (post-super-deduction) + adjustments
+  //   Low-tax contributions = employer SG + salary sacrifice + personal deductible
+  //   Total = Div 293 income + low-tax contributions
+  //   If Total > $250k, additional 15% applies to the lesser of:
+  //     (a) low-tax contributions, or
+  //     (b) Total − $250k.
+  // Note that the Total reduces to "pre-super-deduction taxable income +
+  // employer SG" — it does not depend on whether the personal contribution
+  // is made or not. What does depend on the personal contribution is the
+  // size of "low-tax contributions" (capped by the excess).
+  function analyzeDiv293(person, personalContribution, employerSG) {
+    const preDeductionTaxable = person.taxableIncome || 0;
+    const taxReturnTaxable = Math.max(0, preDeductionTaxable - personalContribution);
+    const lowTaxContributions = (employerSG || 0) + (personalContribution || 0);
+    const div293Income = taxReturnTaxable; // simplified — no fringe/investment-loss adjustments
+    const total = div293Income + lowTaxContributions;
+    const threshold = D.DIV_293_THRESHOLD;
+    const excess = Math.max(0, total - threshold);
+    const taxableContribs = Math.min(lowTaxContributions, excess);
+    const tax = taxableContribs * D.DIV_293_EXTRA;
+    return {
+      preDeductionTaxable,
+      taxReturnTaxable,
+      employerSG: employerSG || 0,
+      personalContribution: personalContribution || 0,
+      lowTaxContributions,
+      div293Income,
+      total,
+      threshold,
+      excess,
+      taxableContribs,
+      tax,
+      affected: excess > 0,
+    };
+  }
+
   // Compute strategy result for a person + proposed personal-deductible contribution.
-  // Adds Div 293 logic and contributions-tax handling.
-  function computePersonStrategy(person, contribution, brackets = D.TAX_BRACKETS_2024_25) {
+  // Handles Div 293 properly (including employer SG) and reports marginal
+  // Div 293 cost so net benefit reflects the true incremental impact.
+  function computePersonStrategy(person, contribution, brackets = D.TAX_BRACKETS_2024_25, employerSG = 0) {
     const incomeBefore = person.taxableIncome;
     const incomeAfter = Math.max(0, incomeBefore - contribution);
     const taxBefore = totalTax(incomeBefore, brackets);
     const taxAfter = totalTax(incomeAfter, brackets);
     const taxSaving = taxBefore - taxAfter;
 
-    // Contributions tax: 15% always. Div 293 adds 15% if Div 293 income > $250k.
-    const div293Income = incomeBefore; // simplification (true Div293 adds super contribs but we approximate)
-    let div293Extra = 0;
-    if (div293Income + contribution > D.DIV_293_THRESHOLD) {
-      // Only the amount of contribution above the threshold is taxed.
-      const excess = Math.min(contribution, div293Income + contribution - D.DIV_293_THRESHOLD);
-      div293Extra = excess * D.DIV_293_EXTRA;
-    }
-    const contributionsTax = contribution * D.CONTRIBUTIONS_TAX + div293Extra;
-    const netBenefit = taxSaving - contributionsTax;
+    const d293With = analyzeDiv293(person, contribution, employerSG);
+    const d293Baseline = analyzeDiv293(person, 0, employerSG);
+    const div293Marginal = d293With.tax - d293Baseline.tax;
+
+    const contributionsTax = contribution * D.CONTRIBUTIONS_TAX;
+    const netBenefit = taxSaving - contributionsTax - div293Marginal;
 
     return {
       personId: person.id,
@@ -131,7 +166,10 @@ window.PlannerCalc = (() => {
       taxAfter,
       taxSaving,
       contributionsTax,
-      div293Extra,
+      div293Extra: div293Marginal,      // marginal Div 293 caused by this contribution
+      div293Total: d293With.tax,        // total Div 293 in this scenario
+      div293Baseline: d293Baseline.tax, // Div 293 if no personal contribution
+      employerSG,
       netBenefit,
       refundBefore: (person.paygWithheld || 0) - taxBefore,
       refundAfter: (person.paygWithheld || 0) - taxAfter,
@@ -140,7 +178,7 @@ window.PlannerCalc = (() => {
   }
 
   // Strategy comparison for a single person.
-  function buildStrategies(person, customContribution, caps = D.CONCESSIONAL_CAPS, targetYear = "2025-26") {
+  function buildStrategies(person, customContribution, caps = D.CONCESSIONAL_CAPS, targetYear = "2025-26", brackets = D.TAX_BRACKETS_2024_25) {
     const cf = carryForwardAvailable(person, targetYear, caps);
     const employerThisYear = person.employerContribs?.[targetYear] || 0;
     const minContrib = 0;
@@ -149,33 +187,31 @@ window.PlannerCalc = (() => {
     const custom = Math.min(Math.max(0, customContribution || 0), maxContrib);
 
     const strategies = {
-      none: computePersonStrategy(person, 0),
-      minimum: computePersonStrategy(person, minContrib),
-      maximum: computePersonStrategy(person, maxContrib),
-      custom: computePersonStrategy(person, custom),
+      none: computePersonStrategy(person, 0, brackets, employerThisYear),
+      minimum: computePersonStrategy(person, minContrib, brackets, employerThisYear),
+      maximum: computePersonStrategy(person, maxContrib, brackets, employerThisYear),
+      custom: computePersonStrategy(person, custom, brackets, employerThisYear),
     };
     return { strategies, cf, employerThisYear, maxContrib };
   }
 
   // Optimisation: find contribution that maximises net benefit, within available cap.
-  // Net benefit only stays positive while marginal rate (after the contribution) >= 15% + div293 share.
-  // We bisect across [0, maxContrib]. Function is concave so we can scan.
-  function optimiseContribution(person, maxContrib, brackets = D.TAX_BRACKETS_2024_25) {
+  function optimiseContribution(person, maxContrib, brackets = D.TAX_BRACKETS_2024_25, employerSG = 0) {
     if (maxContrib <= 0) return { optimal: 0, net: 0 };
     let best = { optimal: 0, net: 0 };
     const step = Math.max(50, Math.round(maxContrib / 500));
     for (let c = 0; c <= maxContrib; c += step) {
-      const r = computePersonStrategy(person, c, brackets);
+      const r = computePersonStrategy(person, c, brackets, employerSG);
       if (r.netBenefit > best.net) best = { optimal: c, net: r.netBenefit };
     }
     // Always test the cap itself — for high earners the optimum sits exactly there.
-    const cap = computePersonStrategy(person, maxContrib, brackets);
+    const cap = computePersonStrategy(person, maxContrib, brackets, employerSG);
     if (cap.netBenefit > best.net) best = { optimal: maxContrib, net: cap.netBenefit };
     // Refine ±step in $1 increments around the best candidate.
     const lo = Math.max(0, best.optimal - step);
     const hi = Math.min(maxContrib, best.optimal + step);
     for (let c = lo; c <= hi; c += 1) {
-      const r = computePersonStrategy(person, c, brackets);
+      const r = computePersonStrategy(person, c, brackets, employerSG);
       if (r.netBenefit > best.net) best = { optimal: c, net: r.netBenefit };
     }
     return best;
@@ -342,11 +378,11 @@ window.PlannerCalc = (() => {
   }
 
   // Build a "tax saved vs contribution" series for a person, used for charts.
-  function buildSavingsCurve(person, maxContrib, points = 30, brackets = D.TAX_BRACKETS_2024_25) {
+  function buildSavingsCurve(person, maxContrib, points = 30, brackets = D.TAX_BRACKETS_2024_25, employerSG = 0) {
     const series = [];
     const step = Math.max(1, Math.round(maxContrib / points));
     for (let c = 0; c <= maxContrib; c += step) {
-      const r = computePersonStrategy(person, c, brackets);
+      const r = computePersonStrategy(person, c, brackets, employerSG);
       series.push({ contribution: c, taxSaving: r.taxSaving, contributionsTax: r.contributionsTax, netBenefit: r.netBenefit });
     }
     return series;
@@ -362,6 +398,7 @@ window.PlannerCalc = (() => {
     recomputePerson,
     totalUsedInYear,
     carryForwardAvailable,
+    analyzeDiv293,
     computePersonStrategy,
     buildStrategies,
     optimiseContribution,
