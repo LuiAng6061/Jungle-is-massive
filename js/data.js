@@ -1,0 +1,184 @@
+// Advanced Super & Tax Planner — reference data
+// All amounts in AUD. Sources: ATO published rates as at FY 2024-25.
+
+window.PlannerData = (() => {
+  // Concessional contribution caps by FY (per person)
+  // 2018-19 was the first year carry-forward unused cap was tracked.
+  const CONCESSIONAL_CAPS = {
+    "2018-19": 25000,
+    "2019-20": 25000,
+    "2020-21": 25000,
+    "2021-22": 27500,
+    "2022-23": 27500,
+    "2023-24": 27500,
+    "2024-25": 30000,
+    "2025-26": 30000,
+    "2026-27": 30000, // editable assumption
+  };
+
+  // ATO marginal tax brackets (resident, no LITO modelled here for simplicity).
+  // 2024-25 Stage 3 rates per spreadsheet.
+  const TAX_BRACKETS_2024_25 = [
+    { upTo: 18200, rate: 0.0, base: 0 },
+    { upTo: 45000, rate: 0.16, base: 0 },
+    { upTo: 135000, rate: 0.30, base: 4288 },
+    { upTo: 190000, rate: 0.37, base: 31288 },
+    { upTo: Infinity, rate: 0.45, base: 51638 },
+  ];
+
+  const MEDICARE_LEVY = 0.02;
+  // FY 2024-25 Medicare levy low-income thresholds (single, general).
+  // Below LOW: no Medicare. Phase-in between LOW and HIGH at 10c per dollar.
+  // Above HIGH: full 2%. HIGH ≈ LOW / (1 − levy/phase) = LOW / 0.8.
+  const MEDICARE_LEVY_LOW = 27222;
+  const MEDICARE_LEVY_HIGH = 34027;
+  const MEDICARE_LEVY_PHASE_RATE = 0.10;
+  const CONTRIBUTIONS_TAX = 0.15;
+  // Div 293 — additional 15% on concessional contributions if Div 293 income > threshold.
+  const DIV_293_THRESHOLD = 250000;
+  const DIV_293_EXTRA = 0.15;
+
+  // Total Super Balance threshold — must be < $500k on 30 June of prior year to use carry-forward.
+  const TSB_CARRY_FORWARD_THRESHOLD = 500000;
+
+  // Company tax rates
+  const COMPANY_BASE_RATE = 0.25; // base rate entity (passive income <= 80%, turnover < $50m)
+  const COMPANY_FULL_RATE = 0.30;
+
+  // Carry-forward planning years — the 5 lookback years for 2025-26 contributions.
+  const CARRY_FORWARD_YEARS = ["2020-21", "2021-22", "2022-23", "2023-24", "2024-25"];
+
+  // ATO Individual tax return — PAYG income items (1-3).
+  const PAYG_ITEMS = [
+    { key: "item1",  label: "Salary or wages (Item 1)" },
+    { key: "item2",  label: "Allowances, earnings, tips, director's fees (Item 2)" },
+    { key: "item3",  label: "Employer lump sum payments A & B (Item 3)" },
+  ];
+
+  // ATO Individual tax return — Business / partnership / trust income (Items 13, 15).
+  const BUSINESS_ITEMS = [
+    { key: "item13", label: "Partnership/trust distributions — non-PSI (Item 13)" },
+    { key: "item15a", label: "Net income — primary production (Item 15A)" },
+    { key: "item15b", label: "Net income — non-primary production (Item 15B)" },
+  ];
+
+  // ATO Individual tax return — Deductions D1 through D15. D12 is the
+  // personal super deduction which is modelled by the strategy comparison,
+  // so we keep it visible but read-only.
+  const DEDUCTION_ITEMS = [
+    { key: "D1",  label: "D1 Work-related car expenses" },
+    { key: "D2",  label: "D2 Work-related travel expenses" },
+    { key: "D3",  label: "D3 Work-related clothing, laundry & dry-cleaning" },
+    { key: "D4",  label: "D4 Work-related self-education expenses" },
+    { key: "D5",  label: "D5 Other work-related expenses" },
+    { key: "D6",  label: "D6 Low value pool deduction" },
+    { key: "D7",  label: "D7 Interest deductions" },
+    { key: "D8",  label: "D8 Dividend deductions" },
+    { key: "D9",  label: "D9 Gifts or donations" },
+    { key: "D10", label: "D10 Cost of managing tax affairs" },
+    { key: "D11", label: "D11 Deductible UPP of foreign pension or annuity" },
+    { key: "D12", label: "D12 Personal superannuation contributions (set in Strategy)", readOnly: true },
+    { key: "D13", label: "D13 Deduction for project pool" },
+    { key: "D14", label: "D14 Forestry managed investment scheme" },
+    { key: "D15", label: "D15 Other deductions" },
+  ];
+
+  const emptyPayg = () => Object.fromEntries(PAYG_ITEMS.map((i) => [i.key, 0]));
+  const emptyBusiness = () => Object.fromEntries(BUSINESS_ITEMS.map((i) => [i.key, 0]));
+  const emptyDeductions = () => Object.fromEntries(DEDUCTION_ITEMS.map((i) => [i.key, 0]));
+
+  // Default people from the source spreadsheet — populated with PAYG only.
+  const DEFAULT_PEOPLE = [
+    {
+      id: "p1",
+      name: "Ljupco",
+      paygWithheld: 59000,
+      tsb: 350000,
+      paygIncome: { ...emptyPayg(), item1: 200000 },
+      businessIncome: emptyBusiness(),
+      deductions: emptyDeductions(),
+      taxableIncome: 200000, // derived, kept in sync by calc.recomputePerson
+      employerContribs: {
+        "2020-21": 19000,
+        "2021-22": 21000,
+        "2022-23": 22000,
+        "2023-24": 23000,
+        "2024-25": 23000,
+        "2025-26": 23000,
+        "2026-27": 24000,
+      },
+      personalContribs: {
+        "2020-21": 0,
+        "2021-22": 0,
+        "2022-23": 0,
+        "2023-24": 0,
+        "2024-25": 0,
+      },
+    },
+    {
+      id: "p2",
+      name: "Julie",
+      paygWithheld: 16451,
+      tsb: 280000,
+      paygIncome: { ...emptyPayg(), item1: 220000 },
+      businessIncome: emptyBusiness(),
+      deductions: emptyDeductions(),
+      taxableIncome: 220000,
+      employerContribs: {
+        "2020-21": 18000,
+        "2021-22": 20000,
+        "2022-23": 22000,
+        "2023-24": 23000,
+        "2024-25": 23000,
+        "2025-26": 23000,
+        "2026-27": 24000,
+      },
+      personalContribs: {
+        "2020-21": 0,
+        "2021-22": 0,
+        "2022-23": 0,
+        "2023-24": 0,
+        "2024-25": 0,
+      },
+    },
+  ];
+
+  // Default property scenario — 2026-27.
+  const DEFAULT_PROPERTY = {
+    year: "2026-27",
+    saleProceeds: 2500000,
+    landCost: 600000,
+    constructionCost: 1100000,
+    otherCosts: 150000,
+    holdingPeriodMonths: 18,
+    isCgtEligible: false, // development is generally on revenue account
+    trustDistribution: { ljupco: 0.20, julie: 0.20, bucket: 0.60 },
+    bucketRate: 0.25,
+    bucketDistributeMode: "distribute", // "distribute" applies imputation top-up; "retain" leaves at 25%
+    bucketShareholders: { p1: 0.5, p2: 0.5 },
+  };
+
+  return {
+    CONCESSIONAL_CAPS,
+    TAX_BRACKETS_2024_25,
+    MEDICARE_LEVY,
+    MEDICARE_LEVY_LOW,
+    MEDICARE_LEVY_HIGH,
+    MEDICARE_LEVY_PHASE_RATE,
+    CONTRIBUTIONS_TAX,
+    DIV_293_THRESHOLD,
+    DIV_293_EXTRA,
+    TSB_CARRY_FORWARD_THRESHOLD,
+    COMPANY_BASE_RATE,
+    COMPANY_FULL_RATE,
+    CARRY_FORWARD_YEARS,
+    PAYG_ITEMS,
+    BUSINESS_ITEMS,
+    DEDUCTION_ITEMS,
+    DEFAULT_PEOPLE,
+    DEFAULT_PROPERTY,
+    emptyPayg,
+    emptyBusiness,
+    emptyDeductions,
+  };
+})();
