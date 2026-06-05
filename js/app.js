@@ -14,6 +14,10 @@
     }
     if (!p.businessIncome) p.businessIncome = D.emptyBusiness();
     if (!p.deductions) p.deductions = D.emptyDeductions();
+    if (!p.businessExpenses) p.businessExpenses = D.emptyBusinessExpenses();
+    if (p.businessRevenue === undefined) p.businessRevenue = 0;
+    if (p.paygInstalments === undefined) p.paygInstalments = 0;
+    if (p.voluntaryTaxPaid === undefined) p.voluntaryTaxPaid = 0;
     C.recomputePerson(p);
     return p;
   }
@@ -302,6 +306,17 @@
         return `<tr><td>${it.label}</td><td>${input}</td></tr>`;
       }).join("");
 
+      const businessExpenseRows = D.BUSINESS_EXPENSE_ITEMS.map((it) => `
+        <tr><td>${it.label}</td>
+        <td><input type="number" data-id="${p.id}" data-bind="businessExpense" data-key="${it.key}" value="${p.businessExpenses?.[it.key] || 0}" style="width:160px;text-align:right"/></td></tr>
+      `).join("");
+      const totalBusinessExpenses = inc.businessExpenses;
+      const netFromDetail = inc.netBusinessFromDetail;
+
+      const taxCredits = C.totalTaxCredits(p);
+      const taxAtCurrentTaxable = C.totalTax(inc.taxableIncome, state.brackets);
+      const currentRefund = taxCredits - taxAtCurrentTaxable;
+
       const node = document.createElement("div");
       node.className = "card";
       node.innerHTML = `
@@ -311,11 +326,11 @@
         </div>
         <div class="field-row">
           <div class="field"><label>Name</label><input data-bind="name" data-id="${p.id}" value="${p.name}"/></div>
-          <div class="field"><label>PAYG withheld (current FY)</label><input type="number" data-bind="paygWithheld" data-id="${p.id}" value="${p.paygWithheld}"/></div>
+          <div class="field"><label>Total super balance (30 Jun prior)</label><input type="number" data-bind="tsb" data-id="${p.id}" value="${p.tsb}"/></div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Total super balance (30 Jun prior)</label><input type="number" data-bind="tsb" data-id="${p.id}" value="${p.tsb}"/></div>
           <div class="field"><label>Derived taxable income (read-only)</label><input type="number" value="${inc.taxableIncome}" disabled style="opacity:.7"/></div>
+          <div class="field"><label>Refund / (payable) at current taxable income</label><input type="number" value="${Math.round(currentRefund)}" disabled style="opacity:.7"/></div>
         </div>
 
         <div class="grid grid-2" style="margin-top:18px;">
@@ -338,6 +353,49 @@
                 <tr class="highlight"><td><strong>Total business income</strong></td><td style="text-align:right"><strong>${money(inc.business)}</strong></td></tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-top:18px;">
+          <div>
+            <h4 style="margin:0 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">ABN business income detail${inc.usingDetailBreakdown ? ' <span class="chip good" style="vertical-align:middle">overrides Item 15B</span>' : ''}</h4>
+            <table>
+              <thead><tr><th>Item</th><th style="text-align:right">Amount</th></tr></thead>
+              <tbody>
+                <tr><td>Gross business revenue (sales / fees, ex-GST)</td>
+                  <td><input type="number" data-id="${p.id}" data-bind="businessRevenue" value="${p.businessRevenue || 0}" style="width:160px;text-align:right"/></td></tr>
+                ${businessExpenseRows}
+                <tr class="highlight"><td><strong>Total business expenses</strong></td><td style="text-align:right"><strong>${money(totalBusinessExpenses)}</strong></td></tr>
+                <tr class="${netFromDetail < 0 ? 'bad-row' : 'good-row'}">
+                  <td><strong>Net business income${inc.usingDetailBreakdown ? ' → Item 15B' : ''}</strong></td>
+                  <td style="text-align:right"><strong>${money(netFromDetail)}</strong>${netFromDetail < 0 ? ' <span class="chip bad">loss</span>' : ''}</td></tr>
+              </tbody>
+            </table>
+            <div class="hint" style="margin-top:6px">${inc.usingDetailBreakdown
+              ? 'Detail breakdown is active — direct Item 15B above is ignored. Clear revenue &amp; expenses to revert.'
+              : 'Leave revenue at $0 to enter Item 15B directly in the table above.'}</div>
+          </div>
+
+          <div>
+            <h4 style="margin:0 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Tax already paid this FY (credits)</h4>
+            <table>
+              <tbody>
+                <tr><td>PAYG withheld (employer)</td>
+                  <td><input type="number" data-id="${p.id}" data-bind="paygWithheld" value="${p.paygWithheld || 0}" style="width:160px;text-align:right"/></td></tr>
+                <tr><td>PAYG instalments paid (PAYGI quarterly under ABN)</td>
+                  <td><input type="number" data-id="${p.id}" data-bind="paygInstalments" value="${p.paygInstalments || 0}" style="width:160px;text-align:right"/></td></tr>
+                <tr><td>Voluntary tax payments to ATO</td>
+                  <td><input type="number" data-id="${p.id}" data-bind="voluntaryTaxPaid" value="${p.voluntaryTaxPaid || 0}" style="width:160px;text-align:right"/></td></tr>
+                <tr class="highlight"><td><strong>Total tax credits</strong></td>
+                  <td style="text-align:right"><strong>${money(taxCredits)}</strong></td></tr>
+                <tr><td>Tax assessed at taxable income ${money(inc.taxableIncome)}</td>
+                  <td style="text-align:right">${money(taxAtCurrentTaxable)}</td></tr>
+                <tr class="${currentRefund >= 0 ? 'good-row' : 'bad-row'}">
+                  <td><strong>${currentRefund >= 0 ? 'Estimated refund' : 'Estimated payable'}</strong></td>
+                  <td style="text-align:right"><strong>${money(Math.abs(currentRefund))}</strong></td></tr>
+              </tbody>
+            </table>
+            <div class="hint" style="margin-top:6px">PAYG instalments are quarterly pre-payments the ATO requires once business income passes its threshold. Voluntary payments are any extra you've sent in this year to even out cash flow.</div>
           </div>
         </div>
 
@@ -403,6 +461,7 @@
         else if (bind === "personal") person.personalContribs[year] = val;
         else if (bind === "payg") person.paygIncome[key] = val;
         else if (bind === "business") person.businessIncome[key] = val;
+        else if (bind === "businessExpense") person.businessExpenses[key] = val;
         else if (bind === "deduction") person.deductions[key] = val;
         else person[bind] = val;
         C.recomputePerson(person);

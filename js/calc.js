@@ -53,13 +53,44 @@ window.PlannerCalc = (() => {
   }
 
   // Derive PAYG, business, deductions, and taxable income from the return-form components.
+  // If the user fills in the ABN business detail (gross revenue or any
+  // expense > 0) we use revenue − expenses as the Item 15B net business
+  // income, overriding any direct Item 15B value.
   function computePersonIncome(person) {
     const payg = sumValues(person.paygIncome);
-    const business = sumValues(person.businessIncome);
+    let business = sumValues(person.businessIncome);
+    const revenue = person.businessRevenue || 0;
+    const businessExpenses = sumValues(person.businessExpenses);
+    const usingDetailBreakdown = revenue > 0 || businessExpenses > 0;
+    let netBusinessFromDetail = 0;
+    if (usingDetailBreakdown) {
+      netBusinessFromDetail = revenue - businessExpenses; // can be negative (loss)
+      // Replace the direct Item 15B with the detail-derived net.
+      business = business - (person.businessIncome?.item15b || 0) + netBusinessFromDetail;
+    }
     const grossIncome = payg + business;
     const deductions = sumValues(person.deductions);
     const taxableIncome = Math.max(0, grossIncome - deductions);
-    return { payg, business, grossIncome, deductions, taxableIncome };
+    return {
+      payg,
+      business,
+      grossIncome,
+      deductions,
+      taxableIncome,
+      usingDetailBreakdown,
+      businessRevenue: revenue,
+      businessExpenses,
+      netBusinessFromDetail,
+    };
+  }
+
+  // Sum the year's tax-paid components used to compute refund/payable.
+  function totalTaxCredits(person) {
+    return (
+      (person.paygWithheld || 0) +
+      (person.paygInstalments || 0) +
+      (person.voluntaryTaxPaid || 0)
+    );
   }
 
   // Keep person.taxableIncome consistent with the components (mutates).
@@ -171,8 +202,9 @@ window.PlannerCalc = (() => {
       div293Baseline: d293Baseline.tax, // Div 293 if no personal contribution
       employerSG,
       netBenefit,
-      refundBefore: (person.paygWithheld || 0) - taxBefore,
-      refundAfter: (person.paygWithheld || 0) - taxAfter,
+      taxCredits: totalTaxCredits(person),
+      refundBefore: totalTaxCredits(person) - taxBefore,
+      refundAfter: totalTaxCredits(person) - taxAfter,
       marginalRate: marginalRate(incomeBefore, brackets),
     };
   }
@@ -395,6 +427,7 @@ window.PlannerCalc = (() => {
     marginalRate,
     sumValues,
     computePersonIncome,
+    totalTaxCredits,
     recomputePerson,
     totalUsedInYear,
     carryForwardAvailable,

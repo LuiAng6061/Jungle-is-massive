@@ -62,6 +62,29 @@ window.PlannerData = (() => {
     { key: "item15b", label: "Net income — non-primary production (Item 15B)" },
   ];
 
+  // Business income detail (ABN sole-trader breakdown). When the user enters
+  // gross revenue (or any expense > 0) this breakdown overrides the direct
+  // Item 15B input — net business income = revenue − expenses.
+  const BUSINESS_EXPENSE_ITEMS = [
+    { key: "costOfSales",  label: "Cost of sales / goods sold" },
+    { key: "wages",        label: "Wages & salaries paid to employees" },
+    { key: "contractors",  label: "Contractor / subcontractor payments" },
+    { key: "rent",         label: "Rent of business premises" },
+    { key: "interest",     label: "Interest on business loans" },
+    { key: "depreciation", label: "Depreciation & capital allowances" },
+    { key: "motorVehicle", label: "Motor vehicle expenses" },
+    { key: "insurance",    label: "Insurance" },
+    { key: "utilities",    label: "Utilities, phone, internet" },
+    { key: "other",        label: "Other business expenses" },
+  ];
+
+  // Tax already paid for the current FY (used for refund/payable).
+  const TAX_PAYMENT_ITEMS = [
+    { key: "paygWithheld",     label: "PAYG withheld (employer)" },
+    { key: "paygInstalments",  label: "PAYG instalments paid (PAYGI quarterly under ABN)" },
+    { key: "voluntaryTaxPaid", label: "Voluntary tax payments to ATO" },
+  ];
+
   // ATO Individual tax return — Deductions D1 through D15. D12 is the
   // personal super deduction which is modelled by the strategy comparison,
   // so we keep it visible but read-only.
@@ -86,6 +109,7 @@ window.PlannerData = (() => {
   const emptyPayg = () => Object.fromEntries(PAYG_ITEMS.map((i) => [i.key, 0]));
   const emptyBusiness = () => Object.fromEntries(BUSINESS_ITEMS.map((i) => [i.key, 0]));
   const emptyDeductions = () => Object.fromEntries(DEDUCTION_ITEMS.map((i) => [i.key, 0]));
+  const emptyBusinessExpenses = () => Object.fromEntries(BUSINESS_EXPENSE_ITEMS.map((i) => [i.key, 0]));
 
   // Default people from the source spreadsheet — populated with PAYG only.
   const DEFAULT_PEOPLE = [
@@ -93,9 +117,13 @@ window.PlannerData = (() => {
       id: "p1",
       name: "Ljupco",
       paygWithheld: 59000,
+      paygInstalments: 0,
+      voluntaryTaxPaid: 0,
       tsb: 350000,
       paygIncome: { ...emptyPayg(), item1: 200000 },
       businessIncome: emptyBusiness(),
+      businessRevenue: 0,
+      businessExpenses: emptyBusinessExpenses(),
       deductions: emptyDeductions(),
       taxableIncome: 200000, // derived, kept in sync by calc.recomputePerson
       employerContribs: {
@@ -119,9 +147,13 @@ window.PlannerData = (() => {
       id: "p2",
       name: "Julie",
       paygWithheld: 16451,
+      paygInstalments: 0,
+      voluntaryTaxPaid: 0,
       tsb: 280000,
       paygIncome: { ...emptyPayg(), item1: 220000 },
       businessIncome: emptyBusiness(),
+      businessRevenue: 0,
+      businessExpenses: emptyBusinessExpenses(),
       deductions: emptyDeductions(),
       taxableIncome: 220000,
       employerContribs: {
@@ -174,11 +206,14 @@ window.PlannerData = (() => {
     CARRY_FORWARD_YEARS,
     PAYG_ITEMS,
     BUSINESS_ITEMS,
+    BUSINESS_EXPENSE_ITEMS,
+    TAX_PAYMENT_ITEMS,
     DEDUCTION_ITEMS,
     DEFAULT_PEOPLE,
     DEFAULT_PROPERTY,
     emptyPayg,
     emptyBusiness,
+    emptyBusinessExpenses,
     emptyDeductions,
   };
 })();
