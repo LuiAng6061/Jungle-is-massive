@@ -819,6 +819,125 @@
   }
 
   // ----- Master render -----
+  // ----- "Should I contribute?" — plain-English feasibility -----
+  function renderShouldIContribute() {
+    const wrap = $("#should-content");
+    if (!wrap) return;
+    const target = state.targetYear;
+
+    wrap.innerHTML = state.people.map((p) => {
+      const employerSG = p.employerContribs?.[target] || 0;
+      const built = C.buildStrategies(p, state.customContribs[p.id], state.caps, target, state.brackets);
+      const maxContrib = built.maxContrib;
+
+      // Your tax rate on the next dollar you earn.
+      const yourRate = built.strategies.none.marginalRate;
+      // Super's tax rate.
+      const superRate = 0.15;
+
+      // Is some of the contribution in the Div 293 zone?
+      const baseTotal = (p.taxableIncome || 0) + employerSG;
+      const baseExcess = Math.max(0, baseTotal - D.DIV_293_THRESHOLD);
+      // Each $1 of personal contribution adds 15c Div 293 while:
+      //   - baseTotal > threshold (so an excess exists), AND
+      //   - employerSG + personal_so_far < baseExcess
+      // i.e. for the first max(0, baseExcess - employerSG) dollars of personal contribution.
+      const div293ZoneDollars = baseTotal > D.DIV_293_THRESHOLD
+        ? Math.max(0, Math.min(maxContrib, baseExcess - employerSG))
+        : 0;
+      const noDiv293ZoneDollars = Math.max(0, maxContrib - div293ZoneDollars);
+
+      const savingsPerDollarNoDiv293 = Math.max(0, yourRate - superRate);
+      const savingsPerDollarDiv293 = Math.max(0, yourRate - superRate - 0.15);
+
+      // Use the maximum scenario as the headline figure (matches the optimiser).
+      const maxStrat = built.strategies.maximum;
+      const feasible = maxStrat.netBenefit > 0 && maxContrib > 0;
+
+      const pct = (x) => `${(x * 100).toFixed(0)}c`;
+      const intMoney = (n) => money(Math.round(n));
+
+      // Coin-flip story numbers (per $1)
+      const keepIfNotContributing = 1 - yourRate; // c per $1 kept in pocket
+      const inSuperPerDollar = 1 - superRate;     // c per $1 in super
+      const winsBy = inSuperPerDollar - keepIfNotContributing; // c won per $1
+
+      // Scaled to max contribution
+      const ifKept = maxContrib * keepIfNotContributing;
+      const ifSuper = maxContrib * inSuperPerDollar;
+      const diff = ifSuper - ifKept;
+
+      const div293Note = div293ZoneDollars > 0 ? `
+        <div class="alert warn" style="margin-top:8px;">
+          <strong>Heads up — Div 293:</strong> because ${p.name}'s income + employer SG is above $250,000,
+          the first <strong>${money(div293ZoneDollars)}</strong> of personal contribution attracts an extra
+          15c per dollar (so the saving on those dollars is only <strong>${pct(savingsPerDollarDiv293)}</strong>).
+          The remaining <strong>${money(noDiv293ZoneDollars)}</strong> still saves <strong>${pct(savingsPerDollarNoDiv293)}</strong> per dollar.
+        </div>
+      ` : "";
+
+      return `
+        <div class="card">
+          <h3 style="margin-top:0">${p.name} — should you put money in super?</h3>
+
+          <div class="compare-row">
+            <div class="compare-box your-rate">
+              <div class="small">Your tax rate</div>
+              <div class="number">${pct(yourRate)}</div>
+              <div class="caption">On every extra $1 you earn,<br/>the ATO takes <strong>${pct(yourRate)}</strong>.</div>
+            </div>
+            <div class="op">−</div>
+            <div class="compare-box super-rate">
+              <div class="small">Super's tax rate</div>
+              <div class="number">${pct(superRate)}</div>
+              <div class="caption">When you put money in super,<br/>the fund only pays <strong>${pct(superRate)}</strong>.</div>
+            </div>
+            <div class="op">=</div>
+            <div class="compare-box diff">
+              <div class="small">You save per $1</div>
+              <div class="number">${pct(savingsPerDollarNoDiv293)}</div>
+              <div class="caption">That's <strong>${pct(savingsPerDollarNoDiv293)}</strong> of every dollar<br/>going to YOU instead of the ATO.</div>
+            </div>
+          </div>
+
+          ${div293Note}
+
+          <div class="story">
+            <h4>Think of it like two buckets — $1 in each</h4>
+            <div class="step"><span class="bullet">🪣</span> <span><strong>Pocket bucket:</strong> you earn $1 → the ATO takes ${pct(yourRate)} → you keep <strong>${pct(keepIfNotContributing)}</strong>.</span></div>
+            <div class="step"><span class="bullet">🏦</span> <span><strong>Super bucket:</strong> you put $1 into super → super pays ${pct(superRate)} tax → super has <strong>${pct(inSuperPerDollar)}</strong>.</span></div>
+            <div class="step"><span class="bullet">🏆</span> <span><strong>${pct(inSuperPerDollar)} vs ${pct(keepIfNotContributing)}</strong> — the super bucket wins by <strong>${pct(winsBy)}</strong> for every dollar.</span></div>
+          </div>
+
+          ${maxContrib > 0 ? `
+            <div class="story">
+              <h4>Scaled to ${p.name}'s maximum contribution of ${money(maxContrib)}</h4>
+              <div class="step"><span class="bullet">🪣</span> <span>Keep ${money(maxContrib)} in your pocket → ATO takes ${intMoney(maxContrib * yourRate)} → you end up with <strong>${intMoney(ifKept)}</strong> in your bank.</span></div>
+              <div class="step"><span class="bullet">🏦</span> <span>Put ${money(maxContrib)} in super → super pays ${intMoney(maxContrib * superRate)} tax → super has <strong>${intMoney(ifSuper)}</strong>${div293ZoneDollars > 0 ? ` (then less ${intMoney(div293ZoneDollars * 0.15)} Div 293 = ${intMoney(ifSuper - div293ZoneDollars * 0.15)})` : ""}.</span></div>
+              <div class="total">
+                <strong>Net benefit:</strong> putting it in super leaves you ${intMoney(maxStrat.netBenefit)} better off than keeping it.
+                <span style="color:var(--muted);font-size:12px;display:block;margin-top:4px;">(tax saving ${intMoney(maxStrat.taxSaving)} − contributions tax ${intMoney(maxStrat.contributionsTax)}${maxStrat.div293Extra > 0 ? ` − marginal Div 293 ${intMoney(maxStrat.div293Extra)}` : ""})</span>
+              </div>
+            </div>
+          ` : `
+            <div class="alert warn">${p.name} has no concessional cap available this year (employer SG already fills the cap).</div>
+          `}
+
+          <div class="verdict ${feasible ? "yes" : "no"}">
+            <div class="big-answer">${feasible ? "✓ YES" : "✗ NO"}</div>
+            <div class="summary">
+              ${feasible
+                ? `It's worth contributing — every $1 of personal contribution puts ${pct(savingsPerDollarNoDiv293)}${div293ZoneDollars > 0 ? `–${pct(savingsPerDollarDiv293)}` : ""} back in your pocket instead of the ATO's. Recommended amount: <strong>${money(maxContrib)}</strong>, saving <strong>${intMoney(maxStrat.netBenefit)}</strong>.`
+                : maxContrib === 0
+                  ? `There's no concessional cap left for ${p.name} this year — the employer SG already uses it up.`
+                  : `${p.name}'s tax rate (${pct(yourRate)}) is below super's tax rate (${pct(superRate)}${div293ZoneDollars > 0 ? ` + 15% Div 293` : ""}), so contributing would actually cost more than it saves.`}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
   // ----- Division 293 page -----
   function renderDiv293() {
     const wrap = $("#div293-content");
@@ -1003,6 +1122,7 @@
     renderPeople();
     renderCarryForward();
     renderStrategy();
+    renderShouldIContribute();
     renderDiv293();
     renderProperty();
     renderAssumptions();
