@@ -28,8 +28,126 @@ window.PlannerCalc = (() => {
     return (i - lo) * D.MEDICARE_LEVY_PHASE_RATE;
   }
 
-  function totalTax(income, brackets) {
-    return incomeTax(income, brackets) + medicareLevy(income);
+  // Low Income Tax Offset (LITO) — see LITO_PARAMS.
+  function lito(taxableIncome, params = D.LITO_PARAMS) {
+    const i = Math.max(0, taxableIncome);
+    if (i <= params.firstThreshold) return params.max;
+    if (i <= params.secondThreshold) {
+      return params.max - (i - params.firstThreshold) * params.firstTaperRate;
+    }
+    if (i <= params.endThreshold) {
+      const midOffset = params.max - (params.secondThreshold - params.firstThreshold) * params.firstTaperRate;
+      return Math.max(0, midOffset - (i - params.secondThreshold) * params.secondTaperRate);
+    }
+    return 0;
+  }
+
+  // Medicare Levy Surcharge. Applies if no private hospital cover and
+  // surcharge income exceeds the relevant threshold.
+  function mls(surchargeIncome, hasHospitalCover, isFamily = false, dependents = 0, params = D.MLS_PARAMS) {
+    if (hasHospitalCover) return 0;
+    const i = Math.max(0, surchargeIncome);
+    let base, t1, t2;
+    if (isFamily) {
+      const childAdj = Math.max(0, dependents - 1) * params.perChildAdjustment;
+      base = params.familyBase + childAdj;
+      t1 = params.familyTier1 + childAdj;
+      t2 = params.familyTier2 + childAdj;
+    } else {
+      base = params.singleBase;
+      t1 = params.singleTier1;
+      t2 = params.singleTier2;
+    }
+    if (i <= base) return 0;
+    let rate;
+    if (i <= t1) rate = params.tier1Rate;
+    else if (i <= t2) rate = params.tier2Rate;
+    else rate = params.tier3Rate;
+    return i * rate;
+  }
+
+  // Excess Concessional Contributions charge. The excess is added back
+  // to taxable income at marginal rate, with a 15% offset for what the
+  // fund already paid (the "fund tax offset"). Plus an SIC-style charge
+  // for the deferred tax.
+  function eccCharge(excessAmount, marginalRateInclMedicare, params = D.ECC_PARAMS) {
+    if (excessAmount <= 0) return { additionalTax: 0, interestCharge: 0, total: 0 };
+    const grossTaxOnExcess = excessAmount * marginalRateInclMedicare;
+    const offset = excessAmount * params.fundTaxOffset;
+    const additionalTax = Math.max(0, grossTaxOnExcess - offset);
+    const interestCharge = excessAmount * params.sicAnnualRate * (params.avgMonthsOutstanding / 12);
+    return {
+      additionalTax,
+      interestCharge,
+      total: additionalTax + interestCharge,
+    };
+  }
+
+  // Compute the 5 prior FY codes for a target year.
+  //   "2025-26" → ["2020-21","2021-22","2022-23","2023-24","2024-25"]
+  function getLookbackYears(targetYear) {
+    const startYear = parseInt(String(targetYear).split("-")[0]);
+    if (!Number.isFinite(startYear)) return D.CARRY_FORWARD_YEARS;
+    const years = [];
+    for (let i = 5; i >= 1; i--) {
+      const s = startYear - i;
+      const eShort = String(s + 1).slice(2).padStart(2, "0");
+      years.push(`${s}-${eShort}`);
+    }
+    return years;
+  }
+
+  // Full tax calculation including LITO, Medicare, MLS, and refundable
+  // franking credits. Used by computePersonStrategy.
+  // options:
+  //   applyLito          (default true)
+  //   surchargeIncome    — if omitted, uses taxableIncome (no RFB/RESC added)
+  //   hasHospitalCover   (default true → no MLS)
+  //   isFamily           (default false)
+  //   dependents         (default 0)
+  //   frankingCredits    (default 0) — refundable offset
+  function totalTax(taxableIncome, brackets, options = {}) {
+    let it = incomeTax(taxableIncome, brackets);
+    if (options.applyLito !== false) {
+      const offset = lito(taxableIncome);
+      it = Math.max(0, it - offset); // LITO is non-refundable against income tax only
+    }
+    const ml = medicareLevy(taxableIncome);
+    const mlsAmt = mls(
+      options.surchargeIncome ?? taxableIncome,
+      options.hasHospitalCover ?? true,
+      options.isFamily ?? false,
+      options.dependents ?? 0,
+    );
+    let total = it + ml + mlsAmt;
+    // Franking credits are refundable for individual taxpayers.
+    total -= options.frankingCredits || 0;
+    return total;
+  }
+
+  // Decomposed tax view — used for the per-person tax-breakdown panel.
+  function taxBreakdown(taxableIncome, brackets, options = {}) {
+    const gross = incomeTax(taxableIncome, brackets);
+    const litoOffset = options.applyLito !== false ? lito(taxableIncome) : 0;
+    const incomeTaxAfterLito = Math.max(0, gross - litoOffset);
+    const ml = medicareLevy(taxableIncome);
+    const mlsAmt = mls(
+      options.surchargeIncome ?? taxableIncome,
+      options.hasHospitalCover ?? true,
+      options.isFamily ?? false,
+      options.dependents ?? 0,
+    );
+    const franking = options.frankingCredits || 0;
+    const total = incomeTaxAfterLito + ml + mlsAmt - franking;
+    return {
+      grossIncomeTax: gross,
+      litoOffset,
+      incomeTaxAfterLito,
+      medicareLevy: ml,
+      mls: mlsAmt,
+      frankingCredits: franking,
+      total,
+    };
   }
 
   // Marginal rate at a given income = income-tax bracket rate + Medicare marginal.
@@ -56,6 +174,8 @@ window.PlannerCalc = (() => {
   // If the user fills in the ABN business detail (gross revenue or any
   // expense > 0) we use revenue − expenses as the Item 15B net business
   // income, overriding any direct Item 15B value.
+  // Franked dividends (grossed-up) are added to assessable income; the
+  // franking credit is applied as a refundable offset at tax-payable time.
   function computePersonIncome(person) {
     const payg = sumValues(person.paygIncome);
     let business = sumValues(person.businessIncome);
@@ -65,15 +185,16 @@ window.PlannerCalc = (() => {
     let netBusinessFromDetail = 0;
     if (usingDetailBreakdown) {
       netBusinessFromDetail = revenue - businessExpenses; // can be negative (loss)
-      // Replace the direct Item 15B with the detail-derived net.
       business = business - (person.businessIncome?.item15b || 0) + netBusinessFromDetail;
     }
-    const grossIncome = payg + business;
+    const frankedGrossUp = person.frankedDividendsGrossUp || 0;
+    const grossIncome = payg + business + frankedGrossUp;
     const deductions = sumValues(person.deductions);
     const taxableIncome = Math.max(0, grossIncome - deductions);
     return {
       payg,
       business,
+      frankedGrossUp,
       grossIncome,
       deductions,
       taxableIncome,
@@ -111,7 +232,7 @@ window.PlannerCalc = (() => {
   // Carry-forward unused cap available for a target year (uses the 5 prior years).
   // Returns object with per-year unused cap and total carry-forward available.
   function carryForwardAvailable(person, targetYear = "2025-26", caps = D.CONCESSIONAL_CAPS) {
-    const years = D.CARRY_FORWARD_YEARS; // 2020-21 .. 2024-25
+    const years = getLookbackYears(targetYear);
     const breakdown = years.map((y) => {
       const cap = caps[y] || 0;
       const used = totalUsedInYear(person, y);
@@ -148,7 +269,9 @@ window.PlannerCalc = (() => {
     const preDeductionTaxable = person.taxableIncome || 0;
     const taxReturnTaxable = Math.max(0, preDeductionTaxable - personalContribution);
     const lowTaxContributions = (employerSG || 0) + (personalContribution || 0);
-    const div293Income = taxReturnTaxable; // simplified — no fringe/investment-loss adjustments
+    // Div 293 income adds reportable fringe benefits to taxable income.
+    const rfb = person.reportableFringeBenefits || 0;
+    const div293Income = taxReturnTaxable + rfb;
     const total = div293Income + lowTaxContributions;
     const threshold = D.DIV_293_THRESHOLD;
     const excess = Math.max(0, total - threshold);
@@ -157,6 +280,7 @@ window.PlannerCalc = (() => {
     return {
       preDeductionTaxable,
       taxReturnTaxable,
+      rfb,
       employerSG: employerSG || 0,
       personalContribution: personalContribution || 0,
       lowTaxContributions,
@@ -170,14 +294,34 @@ window.PlannerCalc = (() => {
     };
   }
 
+  // Build the totalTax options for a given person and post-deduction
+  // taxable income. The post-deduction value matters for the income-tax
+  // base; the surcharge income adds RFB and RESC equivalents.
+  function personTaxOptions(person, taxableIncomeForBracket, personalContribution = 0) {
+    const rfb = person.reportableFringeBenefits || 0;
+    const resc = (person.salarySacrifice || 0) + (personalContribution || 0);
+    return {
+      surchargeIncome: taxableIncomeForBracket + rfb + resc,
+      hasHospitalCover: person.privateHospitalCover !== false,
+      isFamily: !!person.mlsFamily,
+      dependents: person.mlsDependents || 0,
+      frankingCredits: person.frankingCredits || 0,
+      applyLito: true,
+    };
+  }
+
   // Compute strategy result for a person + proposed personal-deductible contribution.
   // Handles Div 293 properly (including employer SG) and reports marginal
   // Div 293 cost so net benefit reflects the true incremental impact.
   function computePersonStrategy(person, contribution, brackets = D.TAX_BRACKETS_2024_25, employerSG = 0) {
     const incomeBefore = person.taxableIncome;
     const incomeAfter = Math.max(0, incomeBefore - contribution);
-    const taxBefore = totalTax(incomeBefore, brackets);
-    const taxAfter = totalTax(incomeAfter, brackets);
+    // Surcharge income is invariant of personal contribution (adds RESC back),
+    // matching the Div 293 algebra: (taxable − contrib) + (RESC base + contrib).
+    const optsBefore = personTaxOptions(person, incomeBefore, 0);
+    const optsAfter = personTaxOptions(person, incomeAfter, contribution);
+    const taxBefore = totalTax(incomeBefore, brackets, optsBefore);
+    const taxAfter = totalTax(incomeAfter, brackets, optsAfter);
     const taxSaving = taxBefore - taxAfter;
 
     const d293With = analyzeDiv293(person, contribution, employerSG);
@@ -206,6 +350,8 @@ window.PlannerCalc = (() => {
       refundBefore: totalTaxCredits(person) - taxBefore,
       refundAfter: totalTaxCredits(person) - taxAfter,
       marginalRate: marginalRate(incomeBefore, brackets),
+      breakdownBefore: taxBreakdown(incomeBefore, brackets, optsBefore),
+      breakdownAfter: taxBreakdown(incomeAfter, brackets, optsAfter),
     };
   }
 
@@ -423,15 +569,21 @@ window.PlannerCalc = (() => {
   return {
     incomeTax,
     medicareLevy,
+    lito,
+    mls,
+    eccCharge,
     totalTax,
+    taxBreakdown,
     marginalRate,
     sumValues,
+    getLookbackYears,
     computePersonIncome,
     totalTaxCredits,
     recomputePerson,
     totalUsedInYear,
     carryForwardAvailable,
     analyzeDiv293,
+    personTaxOptions,
     computePersonStrategy,
     buildStrategies,
     optimiseContribution,

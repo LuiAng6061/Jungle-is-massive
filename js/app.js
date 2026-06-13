@@ -18,6 +18,11 @@
     if (p.businessRevenue === undefined) p.businessRevenue = 0;
     if (p.paygInstalments === undefined) p.paygInstalments = 0;
     if (p.voluntaryTaxPaid === undefined) p.voluntaryTaxPaid = 0;
+    // Surcharge / offsets / franking — added later.
+    const surchargeDefaults = D.emptySurcharge();
+    for (const k of Object.keys(surchargeDefaults)) {
+      if (p[k] === undefined) p[k] = surchargeDefaults[k];
+    }
     C.recomputePerson(p);
     return p;
   }
@@ -297,7 +302,10 @@
         <td><input type="number" data-id="${p.id}" data-bind="business" data-key="${it.key}" value="${p.businessIncome?.[it.key] || 0}" style="width:160px;text-align:right"/></td></tr>
       `).join("");
 
-      const personalSuperDeduction = p.personalContribs?.[state.targetYear] || 0;
+      // D12 shows the PLANNED current-year personal contribution (state.customContribs),
+      // not the historical personalContribs[targetYear] which is only used for the
+      // carry-forward lookback.
+      const personalSuperDeduction = state.customContribs[p.id] || 0;
       const deductionRows = D.DEDUCTION_ITEMS.map((it) => {
         const v = it.key === "D12" ? personalSuperDeduction : (p.deductions?.[it.key] || 0);
         const input = it.readOnly
@@ -314,7 +322,9 @@
       const netFromDetail = inc.netBusinessFromDetail;
 
       const taxCredits = C.totalTaxCredits(p);
-      const taxAtCurrentTaxable = C.totalTax(inc.taxableIncome, state.brackets);
+      const taxOpts = C.personTaxOptions(p, inc.taxableIncome, 0);
+      const breakdown = C.taxBreakdown(inc.taxableIncome, state.brackets, taxOpts);
+      const taxAtCurrentTaxable = breakdown.total;
       const currentRefund = taxCredits - taxAtCurrentTaxable;
 
       const node = document.createElement("div");
@@ -388,14 +398,57 @@
                   <td><input type="number" data-id="${p.id}" data-bind="voluntaryTaxPaid" value="${p.voluntaryTaxPaid || 0}" style="width:160px;text-align:right"/></td></tr>
                 <tr class="highlight"><td><strong>Total tax credits</strong></td>
                   <td style="text-align:right"><strong>${money(taxCredits)}</strong></td></tr>
-                <tr><td>Tax assessed at taxable income ${money(inc.taxableIncome)}</td>
-                  <td style="text-align:right">${money(taxAtCurrentTaxable)}</td></tr>
+              </tbody>
+            </table>
+            <div class="hint" style="margin-top:6px">PAYG instalments are quarterly pre-payments the ATO requires once business income passes its threshold. Voluntary payments are any extra you've sent in this year to even out cash flow.</div>
+          </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-top:18px;">
+          <div>
+            <h4 style="margin:0 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Surcharge, offsets & franking</h4>
+            <table>
+              <tbody>
+                <tr><td>Private hospital cover?</td>
+                  <td style="text-align:right"><label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text);">
+                    <input type="checkbox" data-id="${p.id}" data-bind="privateHospitalCover" ${p.privateHospitalCover ? 'checked' : ''}/>
+                    ${p.privateHospitalCover ? 'Yes — no MLS' : 'No — MLS applies'}</label></td></tr>
+                <tr><td>MLS family threshold?</td>
+                  <td style="text-align:right"><label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text);">
+                    <input type="checkbox" data-id="${p.id}" data-bind="mlsFamily" ${p.mlsFamily ? 'checked' : ''}/>
+                    ${p.mlsFamily ? 'Family' : 'Single'}</label></td></tr>
+                <tr><td>Dependents (for family threshold)</td>
+                  <td><input type="number" data-id="${p.id}" data-bind="mlsDependents" value="${p.mlsDependents || 0}" style="width:160px;text-align:right"/></td></tr>
+                <tr><td>Reportable fringe benefits (RFB)</td>
+                  <td><input type="number" data-id="${p.id}" data-bind="reportableFringeBenefits" value="${p.reportableFringeBenefits || 0}" style="width:160px;text-align:right"/></td></tr>
+                <tr><td>Salary sacrifice super (RESC)</td>
+                  <td><input type="number" data-id="${p.id}" data-bind="salarySacrifice" value="${p.salarySacrifice || 0}" style="width:160px;text-align:right"/></td></tr>
+                <tr><td>Franked dividends — grossed-up (Item 11U)</td>
+                  <td><input type="number" data-id="${p.id}" data-bind="frankedDividendsGrossUp" value="${p.frankedDividendsGrossUp || 0}" style="width:160px;text-align:right"/></td></tr>
+                <tr><td>Franking credits attached (Item 11V)</td>
+                  <td><input type="number" data-id="${p.id}" data-bind="frankingCredits" value="${p.frankingCredits || 0}" style="width:160px;text-align:right"/></td></tr>
+              </tbody>
+            </table>
+            <div class="hint" style="margin-top:6px">RFB &amp; RESC add to MLS and Div 293 income but don't change taxable income. Franked dividend gross-up flows into taxable income; the franking credit is a refundable tax offset.</div>
+          </div>
+          <div>
+            <h4 style="margin:0 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Tax breakdown at current taxable income ${money(inc.taxableIncome)}</h4>
+            <table>
+              <tbody>
+                <tr><td>Income tax (gross, brackets)</td><td style="text-align:right">${money(breakdown.grossIncomeTax)}</td></tr>
+                <tr><td>Less: LITO offset</td><td style="text-align:right">− ${money(breakdown.litoOffset)}</td></tr>
+                <tr><td>Income tax after LITO</td><td style="text-align:right">${money(breakdown.incomeTaxAfterLito)}</td></tr>
+                <tr><td>Plus: Medicare levy (2%)</td><td style="text-align:right">+ ${money(breakdown.medicareLevy)}</td></tr>
+                <tr><td>Plus: Medicare Levy Surcharge</td><td style="text-align:right">+ ${money(breakdown.mls)}</td></tr>
+                <tr><td>Less: franking credits (refundable)</td><td style="text-align:right">− ${money(breakdown.frankingCredits)}</td></tr>
+                <tr class="highlight"><td><strong>Total tax</strong></td><td style="text-align:right"><strong>${money(breakdown.total)}</strong></td></tr>
+                <tr><td>Total tax credits (PAYG / PAYGI / voluntary)</td><td style="text-align:right">− ${money(taxCredits)}</td></tr>
                 <tr class="${currentRefund >= 0 ? 'good-row' : 'bad-row'}">
                   <td><strong>${currentRefund >= 0 ? 'Estimated refund' : 'Estimated payable'}</strong></td>
                   <td style="text-align:right"><strong>${money(Math.abs(currentRefund))}</strong></td></tr>
               </tbody>
             </table>
-            <div class="hint" style="margin-top:6px">PAYG instalments are quarterly pre-payments the ATO requires once business income passes its threshold. Voluntary payments are any extra you've sent in this year to even out cash flow.</div>
+            <div class="hint" style="margin-top:6px">Does not include the planned personal super deduction (modelled separately in Strategy comparison).</div>
           </div>
         </div>
 
@@ -418,8 +471,8 @@
         <table>
           <thead><tr><th>Year</th><th>Cap</th><th>Employer</th><th>Personal</th><th>Used</th><th>Unused</th></tr></thead>
           <tbody>
-            ${D.CARRY_FORWARD_YEARS.map((y) => {
-              const cap = state.caps[y];
+            ${C.getLookbackYears(state.targetYear).map((y) => {
+              const cap = state.caps[y] || 0;
               const emp = p.employerContribs?.[y] || 0;
               const pers = p.personalContribs?.[y] || 0;
               const used = emp + pers;
@@ -456,7 +509,10 @@
         const key = e.target.dataset.key;
         const person = state.people.find((p) => p.id === id);
         if (!person) return;
-        const val = e.target.type === "number" ? Number(e.target.value) : e.target.value;
+        let val;
+        if (e.target.type === "checkbox") val = e.target.checked;
+        else if (e.target.type === "number") val = Number(e.target.value);
+        else val = e.target.value;
         if (bind === "employer") person.employerContribs[year] = val;
         else if (bind === "personal") person.personalContribs[year] = val;
         else if (bind === "payg") person.paygIncome[key] = val;
@@ -571,7 +627,15 @@
     // Cap exceedance alert
     const alertWrap = $("#strategy-alert");
     if (exceed.exceeds) {
-      alertWrap.innerHTML = `<div class="alert bad">⚠ Cap exceedance: total ${money(exceed.total)} exceeds available ${money(exceed.available)} by ${money(exceed.exceedanceAmount)}. Excess is taxed at your marginal rate (less 15% offset) and may attract an excess concessional contributions charge.</div>`;
+      const mr = C.marginalRate(p.taxableIncome || 0, state.brackets);
+      const ecc = C.eccCharge(exceed.exceedanceAmount, mr);
+      alertWrap.innerHTML = `<div class="alert bad">⚠ <strong>Cap exceedance:</strong> total ${money(exceed.total)} exceeds available ${money(exceed.available)} by <strong>${money(exceed.exceedanceAmount)}</strong>.
+        <ul style="margin:8px 0 0 18px; padding:0;">
+          <li>Excess goes back onto your return at marginal ${(mr*100).toFixed(0)}% (less 15% fund-tax offset) = <strong>${money(ecc.additionalTax)}</strong> extra income tax</li>
+          <li>Plus ATO Shortfall Interest Charge ≈ ${(D.ECC_PARAMS.sicAnnualRate*100).toFixed(1)}% × ${D.ECC_PARAMS.avgMonthsOutstanding} mo = <strong>${money(ecc.interestCharge)}</strong></li>
+          <li><strong>Total cost of the excess ≈ ${money(ecc.total)}</strong> (wipes out the contribution benefit).</li>
+        </ul>
+        Reduce your custom contribution to ${money(built.maxContrib)} to stay within cap.</div>`;
     } else if (state.customContribs[p.id] > 0) {
       alertWrap.innerHTML = `<div class="alert good">✓ Within cap. Total concessional contributions ${money(exceed.total)} of ${money(exceed.available)} available.</div>`;
     } else {

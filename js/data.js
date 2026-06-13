@@ -45,7 +45,50 @@ window.PlannerData = (() => {
   const COMPANY_BASE_RATE = 0.25; // base rate entity (passive income <= 80%, turnover < $50m)
   const COMPANY_FULL_RATE = 0.30;
 
+  // Low Income Tax Offset — FY 2024-25 (unchanged by Stage 3).
+  //   income ≤ $37,500            → $700
+  //   $37,500 < income ≤ $45,000  → 700 − (income − 37,500) × 5c
+  //   $45,000 < income ≤ $66,667  → 325 − (income − 45,000) × 1.5c
+  //   income > $66,667            → 0
+  // Non-refundable: reduces income tax but not below zero. Does not reduce Medicare/MLS.
+  const LITO_PARAMS = {
+    max: 700,
+    firstThreshold: 37500,
+    firstTaperRate: 0.05,
+    secondThreshold: 45000,
+    secondTaperRate: 0.015,
+    endThreshold: 66667,
+  };
+
+  // Medicare Levy Surcharge — FY 2024-25. Applies if no appropriate private hospital cover.
+  //   Singles: base $97,000 / T1 $113,000 / T2 $151,000  (1%, 1.25%, 1.5%)
+  //   Families: base $194,000 / T1 $226,000 / T2 $302,000 + $1,500 per dependent after the first
+  // Surcharge is on the entire surcharge income, not just the excess.
+  const MLS_PARAMS = {
+    singleBase: 97000,
+    singleTier1: 113000,
+    singleTier2: 151000,
+    familyBase: 194000,
+    familyTier1: 226000,
+    familyTier2: 302000,
+    perChildAdjustment: 1500,
+    tier1Rate: 0.01,
+    tier2Rate: 0.0125,
+    tier3Rate: 0.015,
+  };
+
+  // Excess Concessional Contributions charge — applied via the Shortfall
+  // Interest Charge on any excess above the cap (approximate). Excess
+  // itself goes back onto the tax return at marginal rate, with a 15%
+  // tax offset for what the fund already paid.
+  const ECC_PARAMS = {
+    sicAnnualRate: 0.0804, // ATO SIC ~8% (resets quarterly)
+    avgMonthsOutstanding: 9, // typical 6–12 months between contribution & assessment
+    fundTaxOffset: 0.15,
+  };
+
   // Carry-forward planning years — the 5 lookback years for 2025-26 contributions.
+  // (Kept for backwards compatibility; calc.getLookbackYears(targetYear) is preferred.)
   const CARRY_FORWARD_YEARS = ["2020-21", "2021-22", "2022-23", "2023-24", "2024-25"];
 
   // ATO Individual tax return — PAYG income items (1-3).
@@ -110,6 +153,15 @@ window.PlannerData = (() => {
   const emptyBusiness = () => Object.fromEntries(BUSINESS_ITEMS.map((i) => [i.key, 0]));
   const emptyDeductions = () => Object.fromEntries(DEDUCTION_ITEMS.map((i) => [i.key, 0]));
   const emptyBusinessExpenses = () => Object.fromEntries(BUSINESS_EXPENSE_ITEMS.map((i) => [i.key, 0]));
+  const emptySurcharge = () => ({
+    reportableFringeBenefits: 0,
+    privateHospitalCover: true,
+    mlsFamily: false,
+    mlsDependents: 0,
+    salarySacrifice: 0, // RESC — voluntary employer super above mandatory SG
+    frankedDividendsGrossUp: 0, // assessable amount (cash + franking credit)
+    frankingCredits: 0, // refundable offset
+  });
 
   // Default people from the source spreadsheet — populated with PAYG only.
   const DEFAULT_PEOPLE = [
@@ -126,6 +178,7 @@ window.PlannerData = (() => {
       businessExpenses: emptyBusinessExpenses(),
       deductions: emptyDeductions(),
       taxableIncome: 200000, // derived, kept in sync by calc.recomputePerson
+      ...emptySurcharge(),
       employerContribs: {
         "2020-21": 19000,
         "2021-22": 21000,
@@ -156,6 +209,7 @@ window.PlannerData = (() => {
       businessExpenses: emptyBusinessExpenses(),
       deductions: emptyDeductions(),
       taxableIncome: 220000,
+      ...emptySurcharge(),
       employerContribs: {
         "2020-21": 18000,
         "2021-22": 20000,
@@ -209,11 +263,15 @@ window.PlannerData = (() => {
     BUSINESS_EXPENSE_ITEMS,
     TAX_PAYMENT_ITEMS,
     DEDUCTION_ITEMS,
+    LITO_PARAMS,
+    MLS_PARAMS,
+    ECC_PARAMS,
     DEFAULT_PEOPLE,
     DEFAULT_PROPERTY,
     emptyPayg,
     emptyBusiness,
     emptyBusinessExpenses,
     emptyDeductions,
+    emptySurcharge,
   };
 })();
