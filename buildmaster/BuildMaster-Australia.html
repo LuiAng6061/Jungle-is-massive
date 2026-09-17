@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BuildMaster Australia — WA Builder Training Simulator</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f766e'/%3E%3Ctext x='32' y='44' font-family='Arial' font-size='34' font-weight='bold' text-anchor='middle' fill='%23fbbf24'%3EB%3C/text%3E%3C/svg%3E"/>
+  <style>
+:root {
+  --bg: #0b1220; --panel: #121b2e; --panel2: #16223a; --line: #243352;
+  --ink: #e6edf7; --muted: #93a4c0; --teal: #0f766e; --teal2: #14b8a6;
+  --amber: #fbbf24; --red: #f87171; --green: #4ade80; --blue: #60a5fa;
+  --radius: 12px;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 15px; line-height: 1.5;
+}
+.app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+.sidebar { background: var(--panel); border-right: 1px solid var(--line); padding: 20px 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.sidebar h1 { font-size: 22px; margin: 0; letter-spacing: .5px; }
+.sidebar h1 span { color: var(--amber); }
+.sub { color: var(--muted); font-size: 12px; margin: 4px 0 20px; }
+.nav { list-style: none; padding: 0; margin: 0 0 18px; }
+.nav li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; color: var(--muted); font-size: 14px; }
+.nav li:hover { background: var(--panel2); color: var(--ink); }
+.nav li.active { background: var(--teal); color: #fff; }
+.nav .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .6; }
+.mode-box label { font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: .5px; }
+.mode-box select, .seedbox { width: 100%; margin-top: 6px; }
+select { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px; width: 100%; }
+.seedbox { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.crumbs { font-weight: 600; }
+.stats { display: flex; gap: 8px; }
+.pill { background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; color: var(--muted); }
+.pill b { color: var(--amber); }
+.view { padding: 28px; flex: 1; max-width: 1000px; }
+
+.disclaimer { padding: 14px 28px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; background: var(--panel); }
+
+h2 { margin: 0 0 4px; font-size: 20px; }
+.lead { color: var(--muted); margin: 0 0 20px; }
+.grid { display: grid; gap: 16px; }
+.grid.cols3 { grid-template-columns: repeat(3, 1fr); }
+.grid.cols2 { grid-template-columns: repeat(2, 1fr); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+.card h3 { margin: 0 0 8px; font-size: 15px; }
+.card .big { font-size: 26px; font-weight: 700; }
+.muted { color: var(--muted); }
+.tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 6px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); }
+.tag.warn { color: var(--amber); border-color: #5a4a17; background: #2a2410; }
+.tag.ok { color: var(--green); }
+.tag.bad { color: var(--red); }
+
+.btn { background: var(--teal); color: #fff; border: none; border-radius: 8px; padding: 10px 16px; font-size: 14px; cursor: pointer; font-weight: 600; }
+.btn:hover { background: var(--teal2); }
+.btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+.btn.ghost:hover { background: var(--panel2); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.mt { margin-top: 18px; } .mb { margin-bottom: 14px; }
+
+.choice { display: block; width: 100%; text-align: left; background: var(--panel2); border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 14px; margin-bottom: 10px; cursor: pointer; font-size: 14px; }
+.choice:hover { border-color: var(--teal2); }
+.choice.selected { border-color: var(--teal2); background: #10261f; }
+.choice.good { border-color: var(--green); }
+.choice.bad { border-color: var(--red); }
+
+.steps { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+.step { font-size: 12px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.step.on { background: var(--teal); color: #fff; border-color: var(--teal); }
+.step.done { color: var(--green); border-color: #1f4d3a; }
+
+.source-panel { background: #0e1830; border: 1px solid var(--line); border-radius: 10px; padding: 14px; font-size: 13px; }
+.source-panel .k { color: var(--muted); }
+.warnbox { background: #2a2410; border: 1px solid #5a4a17; color: var(--amber); border-radius: 8px; padding: 10px; font-size: 13px; }
+.okbox { background: #10261f; border: 1px solid #1f4d3a; color: var(--green); border-radius: 8px; padding: 10px; font-size: 13px; }
+.badbox { background: #2a1414; border: 1px solid #5a2020; color: var(--red); border-radius: 8px; padding: 10px; font-size: 13px; }
+
+.mentor { position: fixed; right: 20px; bottom: 20px; width: 320px; background: var(--panel); border: 1px solid var(--teal); border-radius: 12px; padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.4); z-index: 20; }
+.mentor h4 { margin: 0 0 6px; font-size: 14px; } .mentor .body { font-size: 13px; color: var(--muted); max-height: 200px; overflow-y: auto; }
+.mentor .close { float: right; cursor: pointer; color: var(--muted); }
+
+.bars { display: flex; flex-direction: column; gap: 8px; }
+.bar { display: grid; grid-template-columns: 140px 1fr 40px; align-items: center; gap: 10px; font-size: 13px; }
+.bar .track { background: var(--panel2); border-radius: 999px; height: 10px; overflow: hidden; }
+.bar .fill { height: 100%; background: linear-gradient(90deg, var(--teal), var(--teal2)); }
+textarea { width: 100%; background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px; min-height: 90px; font-family: inherit; }
+a { color: var(--blue); }
+
+@media (max-width: 820px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; }
+  .grid.cols3, .grid.cols2 { grid-template-columns: 1fr; }
+  .view { padding: 18px 16px; }
+  .mentor { left: 16px; right: 16px; width: auto; }
+  .bar { grid-template-columns: 100px 1fr 34px; }
+}
+
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h1>BuildMaster <span>AU</span></h1>
+      <div class="sub">WA residential builder training · educational simulation</div>
+      <ul class="nav" id="nav">
+        <li data-page="dashboard" class="active"><span class="dot"></span>Dashboard</li>
+        <li data-page="project"><span class="dot"></span>Current project</li>
+        <li data-page="play"><span class="dot"></span>Scenario / vertical slice</li>
+        <li data-page="findrule"><span class="dot"></span>Find the Rule</li>
+        <li data-page="review"><span class="dot"></span>Knowledge review</li>
+        <li data-page="profile"><span class="dot"></span>Player profile</li>
+        <li data-page="assessment"><span class="dot"></span>Competency assessment</li>
+      </ul>
+      <div class="mode-box">
+        <label>Difficulty</label>
+        <select id="mode">
+          <option value="beginner">Beginner (guided)</option>
+          <option value="builder">Builder</option>
+          <option value="expert">Expert (minimal help)</option>
+        </select>
+      </div>
+      <div class="seedbox">
+        <button id="newProject" class="btn ghost">New random project</button>
+        <button id="replay" class="btn ghost">Replay (seed)</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="crumbs" id="crumbs">Dashboard</div>
+        <div class="stats">
+          <span class="pill">Lvl <b id="tbLevel">1</b></span>
+          <span class="pill">XP <b id="tbXp">0</b></span>
+          <span class="pill" id="tbLevelName">Construction Beginner</span>
+        </div>
+      </header>
+      <section id="view" class="view"><!-- rendered by app.js --></section>
+      <footer class="disclaimer" id="disclaimer"></footer>
+    </main>
+  </div>
+  <script type="module">
+// BuildMaster Australia — CONTENT LAYER (data only; no game logic, no hard-coded rule enforcement)
+// Jurisdiction 1: Western Australia. Educational simulation only.
+//
+// REGULATORY ACCURACY RULE (master prompt §2): no NCC clause text, standard, measurement or
+// tolerance is invented here. Items with confidence:"MEDIUM" have multi-source SECONDARY
+// corroboration only (primary sources were egress-blocked at build time). Everything else is
+// UNVERIFIED with empty clause fields, awaiting authoritative ingestion.
+
+const META = {
+  jurisdiction: 'WA',
+  buildAcademicOnly: true,
+  disclaimer:
+    'This application is an educational simulation. It does not constitute legal, engineering, ' +
+    'building surveying, licensing or regulatory advice, and passing an in-app assessment does not ' +
+    'confer a licence, registration or statutory qualification. Always verify requirements against ' +
+    'the applicable legislation, NCC edition, standards, approvals and project-specific documentation.',
+};
+
+// ---- REGULATORY SOURCES (Priority-ranked, §3) ------------------------------------------------
+const SOURCES = {
+  ABCB_NCC_V2: {
+    id: 'ABCB_NCC_V2',
+    authority: 'Australian Building Codes Board (ABCB)',
+    document: 'National Construction Code 2022 — Volume Two & ABCB Housing Provisions',
+    edition: 'NCC 2022',
+    amendment: '',
+    source_url: 'https://ncc.abcb.gov.au/editions/ncc-2022',
+    priority: 1,
+    note: 'Primary source egress-blocked in build environment; verify clause text directly.',
+  },
+  WA_BUILDING_ACT: {
+    id: 'WA_BUILDING_ACT',
+    authority: 'Parliament of Western Australia / DEMIRS',
+    document: 'Building Act 2011 (WA)',
+    edition: 'consolidated',
+    source_url: 'https://www.legislation.wa.gov.au/legislation/statutes.nsf/law_a146699.html',
+    priority: 1,
+  },
+  WA_BUILDING_REGS: {
+    id: 'WA_BUILDING_REGS',
+    authority: 'Government of Western Australia',
+    document: 'Building Regulations 2012 (WA)',
+    edition: 'consolidated',
+    source_url: 'https://www.legislation.wa.gov.au/legislation/statutes.nsf/law_s6987.html',
+    priority: 1,
+  },
+  AS_3740: {
+    id: 'AS_3740',
+    authority: 'Standards Australia',
+    document: 'AS 3740 Waterproofing of domestic wet areas',
+    edition: 'AS 3740:2021 (referenced by NCC 2022)',
+    source_url: 'https://www.standards.org.au/',
+    priority: 2,
+  },
+};
+
+// ---- KNOWLEDGE TOPICS (§37 object shape) -----------------------------------------------------
+// requirement_type: verified-requirement | educational-explanation | industry-practice | example
+const TOPICS = [
+  {
+    id: 'WP-FALLS', topic: 'Shower floor falls to waste', category: 'Waterproofing', skill: 'waterproofing',
+    difficulty: 1, jurisdiction: 'WA', building_class: 'Class 1a', ncc_edition: 'NCC 2022',
+    ncc_section: 'Volume Two / Housing Provisions Part 10.2', clause: '', source: 'ABCB_NCC_V2',
+    requirement_type: 'educational-explanation', status: 'UNVERIFIED', confidence: 'MEDIUM',
+    explanation:
+      'Shower and wet-area floors are graded so water drains to the floor waste rather than ponding ' +
+      'or migrating past the waterproofing. NCC 2022 reinstated wet-area construction detail into ' +
+      'Housing Provisions Part 10.2, with AS 3740 available as an alternative construction method.',
+    common_mistake: 'Assuming a visually "flat" floor is acceptable without checking the documented fall/grade.',
+    site_example: 'A finished shower base where water pools in a corner instead of running to the waste.',
+    prerequisites: [], related_topics: ['WP-WETAREA'],
+  },
+  {
+    id: 'WP-WETAREA', topic: 'Wet area waterproofing (Part 10.2 / AS 3740)', category: 'Waterproofing',
+    skill: 'waterproofing', difficulty: 2, jurisdiction: 'WA', building_class: 'Class 1a',
+    ncc_edition: 'NCC 2022', ncc_section: 'Volume Two H4 / Housing Provisions Part 10.2', clause: '',
+    source: 'ABCB_NCC_V2', requirement_type: 'educational-explanation', status: 'UNVERIFIED',
+    confidence: 'MEDIUM',
+    explanation:
+      'Wet areas must be waterproofed / water-resistant to defined extents. In NCC 2022 the deemed-to-' +
+      'satisfy detail sits in Housing Provisions Part 10.2, and AS 3740:2021 remains a suitable ' +
+      'construction method. Confirm exact waterproofed extents against the current provision.',
+    common_mistake: 'Treating AS 3740 and Part 10.2 as identical — NCC 2022 lets you use Part 10.2 without AS 3740.',
+    site_example: 'Membrane turned up the wall to an undocumented height at the shower.',
+    prerequisites: ['WP-FALLS'], related_topics: ['WP-FALLS', 'DTS-PERF'],
+  },
+  {
+    id: 'REG-PERMIT', topic: 'WA building permit before work commences', category: 'Regulatory',
+    skill: 'siteManagement', difficulty: 1, jurisdiction: 'WA', building_class: 'Class 1a',
+    ncc_edition: '', ncc_section: '', clause: '', source: 'WA_BUILDING_ACT',
+    requirement_type: 'educational-explanation', status: 'UNVERIFIED', confidence: 'MEDIUM',
+    explanation:
+      'In WA, building work generally requires a building permit under the Building Act 2011 before work ' +
+      'commences, unless specifically exempted by the Regulations or the Minister. Permits are administered ' +
+      'with the Building Regulations 2012.',
+    common_mistake: 'Starting affected work before confirming the permit covers it.',
+    site_example: 'A structural alteration proposed that differs from the permitted documents.',
+    prerequisites: [], related_topics: ['STR-WALL'],
+  },
+  {
+    id: 'DTS-PERF', topic: 'DTS pathway vs Performance Solution', category: 'Regulatory reasoning',
+    skill: 'ncc', difficulty: 3, jurisdiction: 'WA', building_class: 'Class 1a', ncc_edition: 'NCC 2022',
+    ncc_section: 'NCC governing requirements', clause: '', source: 'ABCB_NCC_V2',
+    requirement_type: 'educational-explanation', status: 'UNVERIFIED', confidence: 'LOW',
+    explanation:
+      'Compliance with a Performance Requirement can be met by a Deemed-to-Satisfy (DTS) Solution, a ' +
+      'Performance Solution, or a combination. Deviating from DTS is NOT automatically non-compliant, and a ' +
+      'Performance Solution is NOT automatically acceptable — it must be shown to meet the relevant ' +
+      'Performance Requirements with appropriate evidence.',
+    common_mistake: 'Assuming "not DTS" means "illegal", or "Performance Solution" means "approved".',
+    site_example: 'A window detail that differs from the documented DTS detail.', prerequisites: [],
+    related_topics: ['WP-WETAREA'],
+  },
+  {
+    id: 'STR-WALL', topic: 'Altered / removed structural wall', category: 'Structure', skill: 'structural',
+    difficulty: 2, jurisdiction: 'WA', building_class: 'Class 1a', ncc_edition: '', ncc_section: '',
+    clause: '', source: 'ABCB_NCC_V2', requirement_type: 'educational-explanation', status: 'UNVERIFIED',
+    confidence: 'LOW',
+    explanation:
+      'A wall shown as structural on the engineering documentation carries load. Removing or altering it ' +
+      'without engineering clarification changes the load path and can affect stability. The management ' +
+      'response is typically to stop the AFFECTED work, obtain engineering input, and document it.',
+    common_mistake: 'Relying on a trade\'s verbal assurance that "it will be fine".',
+    site_example: 'A framed opening where the drawings show a load-bearing wall.', prerequisites: [],
+    related_topics: ['REG-PERMIT'],
+  },
+  {
+    id: 'STR-TIEDOWN', topic: 'Roof tie-down / connections', category: 'Structure', skill: 'structural',
+    difficulty: 2, jurisdiction: 'WA', building_class: 'Class 1a', ncc_edition: '', ncc_section: '',
+    clause: '', source: 'ABCB_NCC_V2', requirement_type: 'educational-explanation', status: 'UNVERIFIED',
+    confidence: 'LOW',
+    explanation:
+      'Roof members must be tied down along a continuous load path to resist wind uplift, per the ' +
+      'engineering design and applicable wind classification. Missing or substituted connectors break the ' +
+      'load path.',
+    common_mistake: 'Assuming standard connectors suit every wind classification without checking the design.',
+    site_example: 'A truss with no visible tie-down connector at the top plate.', prerequisites: [],
+    related_topics: [],
+  },
+  {
+    id: 'ENERGY-INSUL', topic: 'Insulation installation & thermal bridging', category: 'Energy efficiency',
+    skill: 'defects', difficulty: 1, jurisdiction: 'WA', building_class: 'Class 1a', ncc_edition: 'NCC 2022',
+    ncc_section: '', clause: '', source: 'ABCB_NCC_V2', requirement_type: 'educational-explanation',
+    status: 'UNVERIFIED', confidence: 'LOW',
+    explanation:
+      'Insulation only performs if installed to its intended thermal value: gaps, compression and thermal ' +
+      'bridges reduce effective performance below the documented energy assessment.',
+    common_mistake: 'Compressing batts to fit and assuming the rated R-value still applies.',
+    site_example: 'Batts stuffed behind pipework, compressed to half thickness.', prerequisites: [],
+    related_topics: [],
+  },
+  {
+    id: 'SAFE-STOP', topic: 'Stop-work as a management decision', category: 'Safety / Management',
+    skill: 'safety', difficulty: 2, jurisdiction: 'WA', building_class: 'Class 1a', ncc_edition: '',
+    ncc_section: '', clause: '', source: 'WA_BUILDING_ACT', requirement_type: 'educational-explanation',
+    status: 'UNVERIFIED', confidence: 'LOW',
+    explanation:
+      'Stopping affected work is sometimes the correct action while information is obtained — but it is not ' +
+      'universally correct. The builder must identify the SCOPE of affected work and the REASON, not stop the ' +
+      'whole site reflexively.',
+    common_mistake: 'Either ignoring a serious risk, or stopping everything without defining scope.',
+    site_example: 'Concealed structural uncertainty discovered before lining.', prerequisites: [],
+    related_topics: ['STR-WALL'],
+  },
+];
+
+// ---- THE FIRST PROJECT (§12) -----------------------------------------------------------------
+const PROJECT = {
+  id: 'perth-dwelling-01',
+  name: 'Lot 42 — Single-storey dwelling, suburban Perth',
+  jurisdiction: 'WA', building_class: 'Class 1a', ncc_edition: 'NCC 2022',
+  summary: '3 bed / 2 bath, double garage, single storey. Brick veneer, timber roof framing.',
+  documents: [
+    { id: 'site-plan', name: 'Site plan', note: 'Setbacks, orientation, stormwater.' },
+    { id: 'floor-plan', name: 'Floor plan', note: 'Room layout, wet areas, wall types.' },
+    { id: 'elevations', name: 'Elevations', note: 'External finishes, heights.' },
+    { id: 'structural', name: 'Structural drawings', note: 'Load-bearing walls, beams, tie-down.' },
+    { id: 'wet-area-detail', name: 'Wet area detail', note: 'Falls, membrane extents, waste locations.' },
+    { id: 'energy', name: 'Energy report', note: 'Insulation R-values, glazing.' },
+    { id: 'permit', name: 'Building permit & approved docs', note: 'What was actually approved.' },
+  ],
+  stages: [
+    { id: 'site', name: 'Site establishment' },
+    { id: 'ground', name: 'Groundworks / foundations' },
+    { id: 'slab', name: 'Slab' },
+    { id: 'frame', name: 'Framing' },
+    { id: 'roof', name: 'Roof / envelope' },
+  ],
+};
+
+// ---- SCENARIOS (§16, §17, §23) ---------------------------------------------------------------
+// A scenario is the playable unit: brief → investigate → find the rule → decide → consequence → learn.
+// Decisions are scored on MULTIPLE dimensions, not a single right/wrong answer (§76).
+const SCENARIOS = [
+  {
+    id: 'SCN-SHOWER-FALLS', title: 'The shower floor looks flat', stage: 'roof', topic: 'WP-FALLS',
+    difficulty: 1, skillsTested: ['waterproofing', 'defects', 'ncc'],
+    brief:
+      'At the wet-area rough-in inspection the tiler mentions the shower base "looks pretty flat" but says ' +
+      '"it\'ll be fine once it\'s tiled". The wet area detail is in the documents.',
+    // Investigation: which evidence to gather. Each has a weight toward good investigation.
+    evidence: [
+      { id: 'ev-detail', doc: 'wet-area-detail', label: 'Check the documented fall/grade to the waste', good: true },
+      { id: 'ev-measure', doc: null, label: 'Measure the actual fall on site with a level', good: true },
+      { id: 'ev-waste', doc: 'wet-area-detail', label: 'Confirm floor waste location vs. low point', good: true },
+      { id: 'ev-verbal', doc: null, label: 'Accept the tiler\'s verbal assurance', good: false },
+      { id: 'ev-paint', doc: null, label: 'Check the exterior paint colour selection', good: false },
+    ],
+    // Find-the-rule correct navigation path.
+    rulePath: {
+      jurisdiction: 'WA', edition: 'NCC 2022', area: 'Health & amenity (wet areas)',
+      pathway: 'DTS (Housing Provisions)', source: 'ABCB_NCC_V2',
+    },
+    decisions: [
+      {
+        id: 'd-continue', label: 'Let tiling proceed as-is',
+        scores: { safety: 0, compliance: -2, quality: -2, documentation: -1, risk: -2 },
+        outcomeGood: false,
+      },
+      {
+        id: 'd-investigate', label: 'Hold shower tiling; measure falls & compare to the detail; document before proceeding',
+        scores: { safety: 1, compliance: 2, quality: 2, documentation: 2, risk: 2 },
+        outcomeGood: true,
+      },
+      {
+        id: 'd-stopall', label: 'Stop the entire site',
+        scores: { safety: 1, compliance: 0, quality: 0, documentation: 0, risk: -1 },
+        outcomeGood: false, note: 'Over-scoped: only the shower waterproofing is affected.',
+      },
+    ],
+    consequences: {
+      good:
+        'You confirm the fall is inadequate against the documented detail, have it corrected and photographed ' +
+        'before waterproofing. No concealed defect. Small programme cost, large risk avoided.',
+      bad:
+        'Tiling proceeds. Three stages later the client reports water pooling and a damp skirting in the ' +
+        'adjoining room. The concealed waterproofing must be investigated and partly rectified — delay, cost ' +
+        'and a client dispute follow.',
+    },
+    learn: {
+      rootCause: 'Inadequate fall to waste concealed by finishes.',
+      missedEvidence: 'The documented grade and an on-site measurement.',
+      better: 'Treat wet-area falls as a hold point before waterproofing; verify against the detail; document.',
+    },
+  },
+  {
+    id: 'SCN-WALL-REMOVED', title: 'A structural wall is missing', stage: 'frame', topic: 'STR-WALL',
+    difficulty: 2, skillsTested: ['structural', 'safety', 'siteManagement'],
+    brief:
+      'On a framing walk you notice a wall shown as load-bearing on the structural drawings has been framed ' +
+      'as a wide opening instead. The carpenter says he "does it all the time".',
+    evidence: [
+      { id: 'w-str', doc: 'structural', label: 'Confirm on the structural drawings that the wall is load-bearing', good: true },
+      { id: 'w-permit', doc: 'permit', label: 'Check whether the change was ever approved', good: true },
+      { id: 'w-above', doc: 'structural', label: 'Trace what the wall supports (load path above)', good: true },
+      { id: 'w-verbal', doc: null, label: 'Rely on the carpenter\'s experience', good: false },
+    ],
+    rulePath: {
+      jurisdiction: 'WA', edition: 'NCC 2022', area: 'Structure',
+      pathway: 'Engineering / permitted documents', source: 'WA_BUILDING_ACT',
+    },
+    decisions: [
+      {
+        id: 'w-proceed', label: 'Proceed — the frame is already up',
+        scores: { safety: -2, compliance: -2, quality: -1, documentation: -1, risk: -2 }, outcomeGood: false,
+      },
+      {
+        id: 'w-stopscope', label: 'Stop the affected structural work, obtain engineering clarification, document, then act',
+        scores: { safety: 2, compliance: 2, quality: 1, documentation: 2, risk: 2 }, outcomeGood: true,
+      },
+    ],
+    consequences: {
+      good:
+        'You isolate the affected work, raise an RFI to the engineer, and get a documented resolution (either ' +
+        'a compliant alternative or reinstatement). Load path integrity confirmed and recorded.',
+      bad:
+        'Framing and roof proceed over an unverified load path. A later inspection queries stability, forcing ' +
+        'invasive investigation and possible rework at a far higher cost.',
+    },
+    learn: {
+      rootCause: 'Undocumented change to a load-bearing element.',
+      missedEvidence: 'The structural drawings and the load path above.',
+      better: 'Verbal experience is not evidence of compliance; stop the affected work and get engineering sign-off.',
+    },
+  },
+];
+
+// ---- RANDOM SITE EVENTS (§19) — small seeded library ----------------------------------------
+const EVENTS = [
+  { id: 'EV-INSUL', stage: 'roof', topic: 'ENERGY-INSUL', text: 'Batts near the bathroom exhaust are compressed to half thickness.' },
+  { id: 'EV-TIEDOWN', stage: 'frame', topic: 'STR-TIEDOWN', text: 'A truss appears to be missing its tie-down connector at the top plate.' },
+  { id: 'EV-VARIATION', stage: 'frame', topic: 'REG-PERMIT', text: 'The client asks to move the kitchen sink 600 mm after framing.' },
+  { id: 'EV-FLAT', stage: 'roof', topic: 'WP-FALLS', text: 'The shower base reads almost flat under a spirit level.' },
+];
+
+// ---- SUBCONTRACTORS & CLIENTS (§29, §30) — profiles only, not stereotypes -------------------
+const SUBCONTRACTORS = [
+  { id: 'chippy', trade: 'Carpenter', competence: 4, reliability: 4, documentation: 2, risk: 'Confident; light on documentation.' },
+  { id: 'plumber', trade: 'Plumber', competence: 3, reliability: 4, documentation: 3, risk: 'Budget-focused; watch substitutions.' },
+  { id: 'tiler', trade: 'Tiler', competence: 5, reliability: 3, documentation: 3, risk: 'Perfectionist but slower.' },
+];
+const CLIENT = { id: 'client-01', name: 'The Novaks', priorities: ['budget', 'quality'], note: 'First-home owners; cost-sensitive but want it right.' };
+
+// ---- SKILL AXES (§11) ------------------------------------------------------------------------
+const SKILL_AXES = [
+  { key: 'structural', label: 'Structural' },
+  { key: 'waterproofing', label: 'Waterproofing' },
+  { key: 'ncc', label: 'NCC navigation' },
+  { key: 'siteManagement', label: 'Site management' },
+  { key: 'contracts', label: 'Contracts / docs' },
+  { key: 'defects', label: 'Defects' },
+  { key: 'safety', label: 'Safety' },
+  { key: 'projectControl', label: 'Project control' },
+  { key: 'forensic', label: 'Forensic reasoning' },
+];
+
+const LEVELS = [
+  'Construction Beginner', 'Site Assistant', 'Junior Site Supervisor', 'Site Supervisor',
+  'Junior Builder', 'Residential Builder', 'Senior Builder', 'Construction Manager',
+  'Expert Builder', 'Master / Forensic Builder',
+];
+
+
+/* ---- */
+
+// BuildMaster Australia — REGULATORY KNOWLEDGE ENGINE
+// The game engine NEVER hard-codes rules; it queries this module. Version/status-aware (§4, §38, §58).
+
+
+function getSource(id) {
+  return SOURCES[id] || null;
+}
+
+function getTopic(id) {
+  return TOPICS.find((t) => t.id === id) || null;
+}
+
+// Determine the applicable regulatory context for a project (does NOT assume newest = applicable).
+function regulatoryContext(project) {
+  return {
+    jurisdiction: project.jurisdiction,
+    building_class: project.building_class,
+    ncc_edition: project.ncc_edition, // taken from the project's approval context, not "latest"
+  };
+}
+
+// Build the source-verification record shown in the VIEW SOURCE panel (§39).
+function sourcePanel(topicId) {
+  const t = getTopic(topicId);
+  if (!t) return null;
+  const s = getSource(t.source);
+  const unreliable = t.status !== 'CURRENT';
+  return {
+    topic: t.topic,
+    requirement_type: t.requirement_type,
+    authority: s ? s.authority : '—',
+    document: s ? s.document : '—',
+    edition: t.ncc_edition || (s ? s.edition : ''),
+    section: t.ncc_section || '',
+    clause: t.clause || '(clause not yet verified)',
+    source_url: s ? s.source_url : '',
+    status: t.status,
+    confidence: t.confidence,
+    warning: unreliable
+      ? 'UNVERIFIED — Do not rely on this information for real-world compliance. Verify against the ' +
+        'applicable NCC edition, standard, legislation and project documents.'
+      : '',
+  };
+}
+
+// Statuses preserved, never overwritten (§58).
+const STATUS = ['CURRENT', 'SUPERSEDED', 'HISTORICAL', 'DRAFT', 'UNVERIFIED'];
+
+
+/* ---- */
+
+// BuildMaster Australia — GAME ENGINE (pure logic; testable; queries the regulatory engine)
+
+
+// ---- Seeded RNG (mulberry32) so projects/events are replayable (§9) --------------------------
+function makeRng(seed) {
+  let a = seed >>> 0;
+  return function rng() {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function hashSeed(str) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+// ---- Difficulty modes (§27, §33) -------------------------------------------------------------
+const MODES = {
+  beginner: { id: 'beginner', label: 'Beginner', hintFloor: 0, freeText: false, guided: true },
+  builder: { id: 'builder', label: 'Builder', hintFloor: 1, freeText: false, guided: false },
+  expert: { id: 'expert', label: 'Expert', hintFloor: 3, freeText: true, guided: false },
+};
+
+// ---- Player profile --------------------------------------------------------------------------
+function newProfile() {
+  const skills = {};
+  SKILL_AXES.forEach((a) => { skills[a.key] = 0; }); // 0..100 descriptive indicators, not certification
+  const knowledge = {};
+  TOPICS.forEach((t) => {
+    knowledge[t.id] = { score: 0, seen: 0, correct: 0, incorrect: 0, reviewDue: 0 };
+  });
+  return {
+    version: 1, xp: 0, level: 1, mode: 'beginner',
+    skills, knowledge, completedScenarios: [], seed: 1,
+  };
+}
+
+function levelFromXp(xp) {
+  // 10 competency levels; XP alone does not advance past a soft cap without competency (§8).
+  const idx = Math.min(LEVELS.length, Math.max(1, Math.floor(xp / 120) + 1));
+  return idx;
+}
+function levelName(level) { return LEVELS[Math.min(level, LEVELS.length) - 1]; }
+
+// Competency gate: to pass a level the player must have non-trivial skill in its core axes (§8).
+function competencyGate(profile, requiredAxes, threshold = 40) {
+  const failing = requiredAxes.filter((k) => (profile.skills[k] || 0) < threshold);
+  return { passed: failing.length === 0, failing };
+}
+
+// ---- Scoring (multi-dimensional, §76) --------------------------------------------------------
+const SCORE_DIMS = ['safety', 'compliance', 'quality', 'documentation', 'risk'];
+
+function scoreScenario(scenario, run) {
+  // run = { evidenceChosen:[ids], ruleCorrect:bool, decisionId, mode }
+  const chosenIds = new Set(run.evidenceChosen || []);
+  const goodEvidence = scenario.evidence.filter((e) => e.good);
+  const goodPicked = goodEvidence.filter((e) => chosenIds.has(e.id)).length;
+  const badPicked = scenario.evidence.filter((e) => !e.good && chosenIds.has(e.id)).length;
+  const evidenceScore = clamp(goodPicked - badPicked, 0, goodEvidence.length) / Math.max(1, goodEvidence.length);
+
+  const decision = scenario.decisions.find((d) => d.id === run.decisionId) || { scores: {}, outcomeGood: false };
+  const decisionTotal = SCORE_DIMS.reduce((s, k) => s + (decision.scores[k] || 0), 0);
+
+  const dims = {
+    evidence: Math.round(evidenceScore * 100),
+    source: run.ruleCorrect ? 100 : 30,
+    decision: Math.round(clamp((decisionTotal + 6) / 12, 0, 1) * 100),
+  };
+  const overall = Math.round((dims.evidence + dims.source + dims.decision) / 3);
+  const xp = Math.round(overall * 0.6) + (decision.outcomeGood ? 20 : 0);
+  return { dims, overall, xp, decision, evidenceScore };
+}
+
+// ---- Consequence engine (probabilistic, remembers decisions, §20, §77) -----------------------
+function resolveConsequence(scenario, result, rng) {
+  // Even a good decision can occasionally surface a latent issue; a bad decision usually bites.
+  const goodPath = result.decision.outcomeGood;
+  const roll = rng();
+  const triggeredBad = goodPath ? roll < 0.1 : roll < 0.85;
+  return {
+    text: triggeredBad ? scenario.consequences.bad : scenario.consequences.good,
+    good: !triggeredBad,
+  };
+}
+
+// ---- Spaced repetition (§10) -----------------------------------------------------------------
+function updateKnowledge(profile, topicId, correct, now = Date.now()) {
+  const k = profile.knowledge[topicId] || (profile.knowledge[topicId] = { score: 0, seen: 0, correct: 0, incorrect: 0, reviewDue: 0 });
+  k.seen += 1;
+  if (correct) { k.correct += 1; k.score = clamp(k.score + 15, 0, 100); }
+  else { k.incorrect += 1; k.score = clamp(k.score - 10, 0, 100); }
+  // Errors bring the topic back sooner; consistent success spaces it out but never removes it.
+  const intervalDays = correct ? Math.min(30, 1 + k.correct * 3) : 1;
+  k.reviewDue = now + intervalDays * 86400000;
+  return k;
+}
+function dueForReview(profile, now = Date.now()) {
+  return Object.entries(profile.knowledge)
+    .filter(([, k]) => k.seen > 0 && k.reviewDue <= now)
+    .map(([id]) => id);
+}
+
+// ---- Apply a scenario result to the profile --------------------------------------------------
+function applyResult(profile, scenario, result, correctForKnowledge) {
+  profile.xp += result.xp;
+  profile.level = levelFromXp(profile.xp);
+  (scenario.skillsTested || []).forEach((axis) => {
+    const delta = Math.round((result.overall - 40) / 6); // -ve if poor, +ve if strong
+    profile.skills[axis] = clamp((profile.skills[axis] || 0) + delta, 0, 100);
+  });
+  updateKnowledge(profile, scenario.topic, correctForKnowledge);
+  if (!profile.completedScenarios.includes(scenario.id)) profile.completedScenarios.push(scenario.id);
+  return profile;
+}
+
+// ---- Seeded random event selection (§9, §19) -------------------------------------------------
+function pickEvent(profile, stage, seed) {
+  const rng = makeRng(hashSeed(`${seed}:${stage}:${profile.completedScenarios.length}`));
+  const pool = EVENTS.filter((e) => e.stage === stage);
+  const list = pool.length ? pool : EVENTS;
+  return list[Math.floor(rng() * list.length)];
+}
+
+// ---- Free-text evaluation (expert mode, §26) — structural, not keyword-only ------------------
+function evaluateFreeText(text, rubric) {
+  const t = (text || '').toLowerCase();
+  const hits = rubric.filter((r) => r.any.some((kw) => t.includes(kw)));
+  const covered = hits.map((h) => h.label);
+  const missed = rubric.filter((r) => !hits.includes(r)).map((h) => h.label);
+  const score = Math.round((covered.length / rubric.length) * 100);
+  return { score, covered, missed };
+}
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+// ---- Persistence (localStorage, guarded) -----------------------------------------------------
+const KEY = 'buildmaster.profile.v1';
+function loadProfile() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) return migrate(JSON.parse(raw));
+  } catch (_) { /* private mode / blocked */ }
+  return newProfile();
+}
+function saveProfile(profile) {
+  try { localStorage.setItem(KEY, JSON.stringify(profile)); } catch (_) { /* ignore */ }
+}
+function migrate(p) {
+  const base = newProfile();
+  return { ...base, ...p, skills: { ...base.skills, ...(p.skills || {}) }, knowledge: { ...base.knowledge, ...(p.knowledge || {}) } };
+}
+
+
+
+/* ---- */
+
+const R={getSource,getTopic,regulatoryContext,sourcePanel,STATUS};
+
+/* ---- */
+
+const E={makeRng,hashSeed,MODES,newProfile,levelFromXp,levelName,competencyGate,SCORE_DIMS,scoreScenario,resolveConsequence,updateKnowledge,dueForReview,applyResult,pickEvent,evaluateFreeText,loadProfile,saveProfile,SCENARIOS};
+
+/* ---- */
+
+// BuildMaster Australia — UI CONTROLLER (vertical slice runner + dashboard + profile)
+
+const $ = (s, el = document) => el.querySelector(s);
+const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let profile = E.loadProfile();
+let seed = profile.seed || 1;
+let currentPage = 'dashboard';
+// Transient run state for the active scenario
+let run = null;
+
+// ---------- boot ----------
+function boot() {
+  $('#disclaimer').textContent = META.disclaimer;
+  $('#mode').value = profile.mode;
+  $('#mode').addEventListener('change', (e) => { profile.mode = e.target.value; persist(); render(); });
+  $('#nav').addEventListener('click', (e) => {
+    const li = e.target.closest('li'); if (!li) return;
+    setPage(li.dataset.page);
+  });
+  $('#newProject').addEventListener('click', () => { seed = Math.floor(Math.random() * 1e9); profile.seed = seed; run = null; persist(); setPage('play'); });
+  $('#replay').addEventListener('click', () => { const s = prompt('Enter project seed to replay', String(seed)); if (s) { seed = parseInt(s, 10) || seed; profile.seed = seed; run = null; persist(); setPage('play'); } });
+  render();
+}
+
+function setPage(p) {
+  currentPage = p;
+  document.querySelectorAll('#nav li').forEach((li) => li.classList.toggle('active', li.dataset.page === p));
+  render();
+}
+function persist() { E.saveProfile(profile); syncTopbar(); }
+function syncTopbar() {
+  $('#tbLevel').textContent = profile.level;
+  $('#tbXp').textContent = profile.xp;
+  $('#tbLevelName').textContent = E.levelName(profile.level);
+}
+
+// ---------- render dispatch ----------
+function render() {
+  syncTopbar();
+  const v = $('#view');
+  $('#crumbs').textContent = ({ dashboard: 'Dashboard', project: 'Current project', play: 'Scenario — vertical slice', findrule: 'Find the Rule', review: 'Knowledge review', profile: 'Player profile', assessment: 'Competency assessment' })[currentPage] || '';
+  v.innerHTML = '';
+  ({ dashboard: renderDashboard, project: renderProject, play: renderPlay, findrule: renderFindRuleStandalone, review: renderReview, profile: renderProfile, assessment: renderAssessment }[currentPage] || renderDashboard)(v);
+}
+
+// ---------- dashboard (§41) ----------
+function renderDashboard(v) {
+  const due = E.dueForReview(profile).length;
+  v.appendChild(el(`<div>
+    <h2>${esc(PROJECT.name)}</h2>
+    <p class="lead">${esc(PROJECT.summary)} · Seed <b>${seed}</b> · ${esc(PROJECT.jurisdiction)} · ${esc(PROJECT.building_class)} · ${esc(PROJECT.ncc_edition)}</p>
+    <div class="grid cols3 mb">
+      <div class="card"><h3>Stage</h3><div class="big">Roof / envelope</div><div class="muted">5 of 5 MVP stages loaded</div></div>
+      <div class="card"><h3>Skill level</h3><div class="big">${profile.level}</div><div class="muted">${esc(E.levelName(profile.level))}</div></div>
+      <div class="card"><h3>Knowledge due</h3><div class="big">${due}</div><div class="muted">topics for spaced review</div></div>
+    </div>
+    <div class="grid cols3 mb">
+      <div class="card"><h3>Scenarios done</h3><div class="big">${profile.completedScenarios.length}/${SCENARIOS.length}</div></div>
+      <div class="card"><h3>XP</h3><div class="big">${profile.xp}</div></div>
+      <div class="card"><h3>Mode</h3><div class="big" style="font-size:20px">${esc(E.MODES[profile.mode].label)}</div></div>
+    </div>
+    <div class="row">
+      <button class="btn" id="go-play">▶ Continue / Play scenario</button>
+      <button class="btn ghost" id="go-project">Review documents</button>
+      <button class="btn ghost" id="go-find">Find the Rule</button>
+      <button class="btn ghost" id="go-review">Knowledge review</button>
+    </div>
+  </div>`));
+  $('#go-play', v).onclick = () => setPage('play');
+  $('#go-project', v).onclick = () => setPage('project');
+  $('#go-find', v).onclick = () => setPage('findrule');
+  $('#go-review', v).onclick = () => setPage('review');
+}
+
+// ---------- project / documents (§13) ----------
+function renderProject(v) {
+  v.appendChild(el(`<div>
+    <h2>Project documents</h2>
+    <p class="lead">Documents you can cross-reference during investigation. Click through in a scenario to gather evidence.</p>
+    <div class="grid cols2">
+      ${PROJECT.documents.map((d) => `<div class="card"><h3>${esc(d.name)}</h3><div class="muted">${esc(d.note)}</div></div>`).join('')}
+    </div>
+    <h3 class="mt">Team</h3>
+    <div class="grid cols3">
+      ${SUBCONTRACTORS.map((s) => `<div class="card"><h3>${esc(s.trade)}</h3><div class="muted">Competence ${s.competence}/5 · Docs ${s.documentation}/5</div><div class="muted">${esc(s.risk)}</div></div>`).join('')}
+      <div class="card"><h3>Client — ${esc(CLIENT.name)}</h3><div class="muted">${esc(CLIENT.note)}</div></div>
+    </div>
+  </div>`));
+}
+
+// ---------- the vertical slice runner ----------
+const FLOW = ['brief', 'investigate', 'findrule', 'decide', 'consequence', 'learn'];
+function startScenario(scn) {
+  run = { scn, step: 'brief', evidenceChosen: [], ruleSel: {}, ruleCorrect: false, decisionId: null, result: null, cons: null, hintLevel: 0 };
+}
+function renderPlay(v) {
+  if (!run) {
+    // pick next uncompleted scenario, else first
+    const next = SCENARIOS.find((s) => !profile.completedScenarios.includes(s.id)) || SCENARIOS[0];
+    v.appendChild(el(`<div>
+      <h2>Scenario select</h2>
+      <p class="lead">A playable vertical slice: brief → investigate → find the rule → decide → consequence → learn.</p>
+      <div class="grid cols2">
+        ${SCENARIOS.map((s) => `<div class="card"><h3>${esc(s.title)} ${profile.completedScenarios.includes(s.id) ? '<span class="tag ok">done</span>' : ''}</h3>
+          <div class="muted mb">${esc(s.brief)}</div>
+          <button class="btn" data-scn="${s.id}">Start</button></div>`).join('')}
+      </div>
+      <p class="muted mt">Suggested next: <b>${esc(next.title)}</b></p>
+    </div>`));
+    v.querySelectorAll('[data-scn]').forEach((b) => b.onclick = () => { startScenario(SCENARIOS.find((s) => s.id === b.dataset.scn)); render(); });
+    return;
+  }
+  const scn = run.scn;
+  const stepsBar = `<div class="steps">${FLOW.map((f) => {
+    const idx = FLOW.indexOf(f), cur = FLOW.indexOf(run.step);
+    return `<span class="step ${f === run.step ? 'on' : idx < cur ? 'done' : ''}">${f}</span>`;
+  }).join('')}</div>`;
+  const wrap = el(`<div><h2>${esc(scn.title)}</h2>${stepsBar}<div id="stepbody"></div></div>`);
+  v.appendChild(wrap);
+  renderStep($('#stepbody', wrap));
+  mountMentor();
+}
+
+function renderStep(body) {
+  const scn = run.scn;
+  if (run.step === 'brief') {
+    body.appendChild(el(`<div>
+      <div class="card mb"><h3>Site event</h3><p>${esc(scn.brief)}</p>
+        <div class="muted">Skills in play: ${scn.skillsTested.join(', ')} · Difficulty ${scn.difficulty}</div></div>
+      <button class="btn" id="next">Investigate ▶</button>
+    </div>`));
+    $('#next', body).onclick = () => { run.step = 'investigate'; render(); };
+    return;
+  }
+  if (run.step === 'investigate') {
+    body.appendChild(el(`<div>
+      <p class="lead">Gather evidence. Choose what you'd actually check — some options are distractions.</p>
+      <div id="ev"></div>
+      <button class="btn mt" id="next">Take what I've gathered ▶</button>
+    </div>`));
+    const evBox = $('#ev', body);
+    scn.evidence.forEach((e) => {
+      const b = el(`<button class="choice ${run.evidenceChosen.includes(e.id) ? 'selected' : ''}">${esc(e.label)}${e.doc ? ` <span class="tag">doc: ${esc(e.doc)}</span>` : ''}</button>`);
+      b.onclick = () => { const i = run.evidenceChosen.indexOf(e.id); if (i >= 0) run.evidenceChosen.splice(i, 1); else run.evidenceChosen.push(e.id); render(); };
+      evBox.appendChild(b);
+    });
+    $('#next', body).onclick = () => { run.step = 'findrule'; render(); };
+    return;
+  }
+  if (run.step === 'findrule') {
+    renderFindRule(body, scn, () => { run.step = 'decide'; render(); });
+    return;
+  }
+  if (run.step === 'decide') {
+    body.appendChild(el(`<div>
+      <p class="lead">Make the management decision. Consider safety, compliance, quality, documentation and risk — there isn't always one "correct" answer.</p>
+      <div id="dec"></div>
+      ${E.MODES[profile.mode].freeText ? `<div class="card mt"><h3>Expert: justify it (free text)</h3><textarea id="ft" placeholder="What do you need to establish before proceeding, and why?"></textarea></div>` : ''}
+      <button class="btn mt" id="next" disabled>Commit decision ▶</button>
+    </div>`));
+    const decBox = $('#dec', body);
+    scn.decisions.forEach((d) => {
+      const b = el(`<button class="choice ${run.decisionId === d.id ? 'selected' : ''}">${esc(d.label)}${d.note ? ` <span class="tag warn">${esc(d.note)}</span>` : ''}</button>`);
+      b.onclick = () => { run.decisionId = d.id; render(); };
+      decBox.appendChild(b);
+    });
+    const nx = $('#next', body); nx.disabled = !run.decisionId;
+    nx.onclick = () => {
+      run.result = E.scoreScenario(scn, { evidenceChosen: run.evidenceChosen, ruleCorrect: run.ruleCorrect, decisionId: run.decisionId, mode: profile.mode });
+      const rng = E.makeRng(E.hashSeed(`${seed}:${scn.id}:${run.decisionId}`));
+      run.cons = E.resolveConsequence(scn, run.result, rng);
+      if ($('#ft', body)) run.freeText = $('#ft', body).value;
+      run.step = 'consequence'; render();
+    };
+    return;
+  }
+  if (run.step === 'consequence') {
+    const good = run.cons.good;
+    body.appendChild(el(`<div>
+      <div class="${good ? 'okbox' : 'badbox'} mb"><b>${good ? 'Outcome' : 'Delayed consequence'}</b><p style="margin:6px 0 0">${esc(run.cons.text)}</p></div>
+      <button class="btn" id="next">See what this taught ▶</button>
+    </div>`));
+    $('#next', body).onclick = () => { run.step = 'learn'; commitResult(); render(); };
+    return;
+  }
+  if (run.step === 'learn') {
+    const res = run.result; const l = scn.learn;
+    const sp = R.sourcePanel(scn.topic);
+    body.appendChild(el(`<div>
+      <div class="grid cols3 mb">
+        <div class="card"><h3>Evidence</h3><div class="big">${res.dims.evidence}</div></div>
+        <div class="card"><h3>Source ID</h3><div class="big">${res.dims.source}</div></div>
+        <div class="card"><h3>Decision</h3><div class="big">${res.dims.decision}</div></div>
+      </div>
+      <div class="card mb"><h3>Learning breakdown</h3>
+        <p><b>Root cause:</b> ${esc(l.rootCause)}</p>
+        <p><b>Missed evidence:</b> ${esc(l.missedEvidence)}</p>
+        <p><b>Better investigation:</b> ${esc(l.better)}</p>
+        <p class="muted">+${res.xp} XP · overall ${res.overall}/100</p>
+      </div>
+      ${sourcePanelHtml(sp)}
+      ${run.freeText ? freeTextFeedback(scn, run.freeText) : ''}
+      <div class="row mt"><button class="btn" id="again">Play another scenario</button><button class="btn ghost" id="dash">Back to dashboard</button></div>
+    </div>`));
+    $('#again', body).onclick = () => { run = null; setPage('play'); };
+    $('#dash', body).onclick = () => { run = null; setPage('dashboard'); };
+    return;
+  }
+}
+
+function commitResult() {
+  if (run.committed) return; run.committed = true;
+  const correctForKnowledge = run.result.overall >= 55 && run.cons.good;
+  E.applyResult(profile, run.scn, run.result, correctForKnowledge);
+  persist();
+}
+
+function freeTextFeedback(scn, text) {
+  const rubric = [
+    { label: 'Immediate safety / scope', any: ['safety', 'stop', 'affected', 'isolate'] },
+    { label: 'Evidence needed', any: ['evidence', 'drawing', 'measure', 'engineer', 'document'] },
+    { label: 'Consultation', any: ['engineer', 'surveyor', 'consult', 'rfi'] },
+    { label: 'Documentation', any: ['document', 'record', 'photo', 'rfi', 'notice'] },
+  ];
+  const r = E.evaluateFreeText(text, rubric);
+  return `<div class="card mb"><h3>Free-text evaluation (structure, not keywords) — ${r.score}/100</h3>
+    <p class="muted">Covered: ${r.covered.map(esc).join(', ') || '—'}</p>
+    <p class="muted">Consider also: ${r.missed.map(esc).join(', ') || '—'}</p></div>`;
+}
+
+// ---------- Find the Rule (embedded + standalone, §17) ----------
+function renderFindRule(body, scn, done) {
+  const path = scn.rulePath;
+  const steps = [
+    { key: 'jurisdiction', label: 'Jurisdiction', opts: ['WA', 'NSW', 'VIC'] },
+    { key: 'edition', label: 'Applicable NCC edition', opts: ['NCC 2022', 'NCC 2019', 'NCC 2016'] },
+    { key: 'area', label: 'Relevant area', opts: [path.area, 'Fire safety', 'Energy efficiency'].filter(uniq) },
+    { key: 'pathway', label: 'Compliance pathway', opts: [path.pathway, 'Performance Solution', 'Unsure'].filter(uniq) },
+  ];
+  const c = el(`<div>
+    <p class="lead">Navigate to the authoritative source — reward is correct source + applicability, not clause memorisation.</p>
+    <div id="frsteps"></div>
+    <button class="btn mt" id="checkrule" disabled>Confirm source ▶</button>
+    <div id="rulefeedback" class="mt"></div>
+  </div>`);
+  body.appendChild(c);
+  const box = $('#frsteps', c);
+  steps.forEach((s) => {
+    const wrap = el(`<div class="card mb"><h3>${esc(s.label)}</h3><div class="row" data-key="${s.key}"></div></div>`);
+    const rowBox = $('.row', wrap);
+    shuffleStable(s.opts).forEach((o) => {
+      const b = el(`<button class="choice" style="width:auto;display:inline-block;margin:0 8px 0 0">${esc(o)}</button>`);
+      b.onclick = () => { run.ruleSel[s.key] = o; rowBox.querySelectorAll('.choice').forEach((x) => x.classList.remove('selected')); b.classList.add('selected'); refresh(); };
+      if (run.ruleSel[s.key] === o) b.classList.add('selected');
+      rowBox.appendChild(b);
+    });
+    box.appendChild(wrap);
+  });
+  const check = $('#checkrule', c);
+  function refresh() { check.disabled = steps.some((s) => !run.ruleSel[s.key]); }
+  refresh();
+  check.onclick = () => {
+    const correct = run.ruleSel.jurisdiction === path.jurisdiction && run.ruleSel.edition === path.edition &&
+      run.ruleSel.area === path.area && run.ruleSel.pathway === path.pathway;
+    run.ruleCorrect = correct;
+    const sp = R.sourcePanel(scn.topic);
+    $('#rulefeedback', c).innerHTML = `<div class="${correct ? 'okbox' : 'warnbox'} mb">${correct
+      ? 'Correct navigation. Authoritative source identified below.'
+      : 'Not the expected path. Compare with the applicable project context, then review the source.'}</div>${sourcePanelHtml(sp)}
+      <button class="btn mt" id="fr-next">Continue to decision ▶</button>`;
+    $('#fr-next', c).onclick = done;
+  };
+}
+function renderFindRuleStandalone(v) {
+  const scn = SCENARIOS[0];
+  if (!run || run.scn !== scn) startScenario(scn);
+  run.step = 'findrule';
+  v.appendChild(el(`<div><h2>Find the Rule — practice</h2></div>`));
+  renderFindRule(v, scn, () => { alert('Nice — in a full scenario this leads to the decision step.'); });
+}
+
+function sourcePanelHtml(sp) {
+  if (!sp) return '';
+  return `<div class="source-panel mb">
+    <div class="row" style="justify-content:space-between"><b>VIEW SOURCE — ${esc(sp.topic)}</b>
+      <span class="tag ${sp.status === 'CURRENT' ? 'ok' : 'warn'}">${esc(sp.status)} · ${esc(sp.confidence)}</span></div>
+    <div><span class="k">Type:</span> ${esc(sp.requirement_type)}</div>
+    <div><span class="k">Authority:</span> ${esc(sp.authority)}</div>
+    <div><span class="k">Document:</span> ${esc(sp.document)} ${esc(sp.edition)}</div>
+    <div><span class="k">Section:</span> ${esc(sp.section || '—')} · <span class="k">Clause:</span> ${esc(sp.clause)}</div>
+    <div><span class="k">Source:</span> <a href="${esc(sp.source_url)}" target="_blank" rel="noopener">${esc(sp.source_url)}</a></div>
+    ${sp.warning ? `<div class="warnbox mt">${esc(sp.warning)}</div>` : ''}
+  </div>`;
+}
+
+// ---------- knowledge review (§10) ----------
+function renderReview(v) {
+  const dueIds = E.dueForReview(profile);
+  v.appendChild(el(`<div>
+    <h2>Knowledge review — spaced repetition</h2>
+    <p class="lead">Repeated errors resurface sooner; consistent success spaces topics out but never removes them.</p>
+    <div class="grid cols2">
+      ${TOPICS.map((t) => {
+        const k = profile.knowledge[t.id] || { score: 0, seen: 0 };
+        const due = dueIds.includes(t.id);
+        return `<div class="card"><h3>${esc(t.topic)} ${due ? '<span class="tag warn">due</span>' : ''}</h3>
+          <div class="muted mb">${esc(t.category)} · ${esc(t.skill)} · status ${esc(t.status)} (${esc(t.confidence)})</div>
+          <div class="bar"><span class="muted">retention</span><div class="track"><div class="fill" style="width:${k.score}%"></div></div><span>${k.score}</span></div>
+          <div class="muted mt" style="font-size:12px">seen ${k.seen || 0}×</div></div>`;
+      }).join('')}
+    </div>
+  </div>`));
+}
+
+// ---------- player profile (§11) ----------
+function renderProfile(v) {
+  const gate = E.competencyGate(profile, ['waterproofing', 'structural', 'ncc'], 40);
+  v.appendChild(el(`<div>
+    <h2>Player profile — ${esc(E.levelName(profile.level))}</h2>
+    <p class="lead">Descriptive learning indicators only — not a licence, registration or competency certification.</p>
+    <div class="card mb"><h3>Skill profile</h3><div class="bars">
+      ${SKILL_AXES.map((a) => `<div class="bar"><span>${esc(a.label)}</span><div class="track"><div class="fill" style="width:${profile.skills[a.key] || 0}%"></div></div><span>${profile.skills[a.key] || 0}</span></div>`).join('')}
+    </div></div>
+    <div class="card mb"><h3>Competency gate → next tier (waterproofing, structural, NCC ≥ 40)</h3>
+      ${gate.passed ? '<div class="okbox">Gate met — progression not blocked by this gate.</div>'
+        : `<div class="warnbox">Not yet: strengthen ${gate.failing.join(', ')}. XP alone does not advance you.</div>`}
+    </div>
+    <div class="card"><h3>Personal learning observations</h3>${learningObservations()}</div>
+  </div>`));
+}
+function learningObservations() {
+  const s = profile.skills; const obs = [];
+  if (s.structural > s.waterproofing + 15) obs.push('Strong structural reasoning but comparatively light on waterproofing evidence.');
+  if (s.contracts < 20 && profile.completedScenarios.length > 0) obs.push('Tends to under-document decisions — documentation score lags.');
+  if (s.safety >= 40) obs.push('Consistently identifies safety scope before acting.');
+  if (!obs.length) obs.push('Not enough data yet — play a few scenarios to generate observations.');
+  return '<ul class="muted">' + obs.map((o) => `<li>${esc(o)}</li>`).join('') + '</ul>';
+}
+
+// ---------- competency assessment (§35) ----------
+function renderAssessment(v) {
+  v.appendChild(el(`<div>
+    <h2>Level competency assessment</h2>
+    <p class="lead">Scenario-based, multi-dimensional. Passing does NOT confer a licence, registration or statutory qualification.</p>
+    <div class="card mb"><h3>Readiness snapshot</h3>
+      <div class="muted">Scenarios completed: ${profile.completedScenarios.length}/${SCENARIOS.length} · XP ${profile.xp} · Level ${profile.level}</div>
+      <div class="bars mt">
+        ${['waterproofing', 'structural', 'ncc', 'safety', 'contracts'].map((k) => {
+          const a = SKILL_AXES.find((x) => x.key === k);
+          return `<div class="bar"><span>${esc(a.label)}</span><div class="track"><div class="fill" style="width:${profile.skills[k] || 0}%"></div></div><span>${profile.skills[k] || 0}</span></div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="${profile.completedScenarios.length >= SCENARIOS.length ? 'okbox' : 'warnbox'}">
+      ${profile.completedScenarios.length >= SCENARIOS.length
+        ? 'All available slice scenarios complete. In the full product this unlocks a scored scenario assessment.'
+        : 'Complete the available scenarios to attempt the assessment.'}
+    </div>
+  </div>`));
+}
+
+// ---------- mentor with progressive hint ladder (§27) ----------
+function mountMentor() {
+  document.querySelector('.mentor')?.remove();
+  if (!run) return;
+  const m = el(`<div class="mentor"><span class="close" id="mc">✕</span><h4>🪵 Builder Mentor <span class="tag">${esc(E.MODES[profile.mode].label)}</span></h4>
+    <div class="body" id="mbody"></div>
+    <button class="btn ghost mt" id="hint" style="width:100%">Ask for a hint</button></div>`);
+  document.body.appendChild(m);
+  $('#mc', m).onclick = () => m.remove();
+  renderHint($('#mbody', m));
+  $('#hint', m).onclick = () => { run.hintLevel = Math.min(6, run.hintLevel + 1); renderHint($('#mbody', m)); };
+}
+function renderHint(box) {
+  const scn = run.scn; const t = R.getTopic(scn.topic); const sp = R.sourcePanel(scn.topic);
+  const floor = E.MODES[profile.mode].hintFloor;
+  const lvl = Math.max(run.hintLevel, run.hintLevel === 0 ? 0 : floor);
+  const ladder = [
+    'The mentor challenges you: experience or "it\'ll be fine" is not evidence. What would you need to prove it?',
+    `Think about the risk category: ${esc(t.category)}. What could go wrong if this is concealed?`,
+    `Technical clue: ${esc(t.common_mistake)}`,
+    `Relevant document: check "${esc(scn.evidence.find((e) => e.doc)?.doc || 'the project detail')}".`,
+    `Relevant source: ${esc(sp.authority)} — ${esc(sp.document)}. Verify the current provision yourself.`,
+    `Model reasoning: ${esc(t.explanation)}`,
+  ];
+  const shown = ladder.slice(0, Math.max(1, lvl));
+  box.innerHTML = shown.map((h, i) => `<p><b>${['Hint 1', 'Hint 2', 'Technical clue', 'Document', 'Source', 'Model reasoning'][i]}:</b> ${h}</p>`).join('')
+    + (lvl >= 6 ? '' : '<p class="muted">The mentor won\'t just hand over the answer — keep investigating.</p>');
+}
+
+// ---------- utils ----------
+function uniq(v, i, a) { return a.indexOf(v) === i; }
+function shuffleStable(arr) { return arr.slice().sort((a, b) => (E.hashSeed(a + seed) - E.hashSeed(b + seed))); }
+
+boot();
+
+  </script>
+</body>
+</html>
