@@ -82,6 +82,8 @@ h2 { margin: 0 0 4px; font-size: 20px; }
 .okbox { background: #10261f; border: 1px solid #1f4d3a; color: var(--green); border-radius: 8px; padding: 10px; font-size: 13px; }
 .badbox { background: #2a1414; border: 1px solid #5a2020; color: var(--red); border-radius: 8px; padding: 10px; font-size: 13px; }
 
+.mentor-fab { position: fixed; right: 20px; bottom: 20px; background: var(--teal); color: #fff; border: none; border-radius: 999px; padding: 12px 18px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,.4); z-index: 20; }
+.mentor-fab:hover { background: var(--teal2); }
 .mentor { position: fixed; right: 20px; bottom: 20px; width: 320px; background: var(--panel); border: 1px solid var(--teal); border-radius: 12px; padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.4); z-index: 20; }
 .mentor h4 { margin: 0 0 6px; font-size: 14px; } .mentor .body { font-size: 13px; color: var(--muted); max-height: 200px; overflow-y: auto; }
 .mentor .close { float: right; cursor: pointer; color: var(--muted); }
@@ -99,6 +101,7 @@ a { color: var(--blue); }
   .grid.cols3, .grid.cols2 { grid-template-columns: 1fr; }
   .view { padding: 18px 16px; }
   .mentor { left: 16px; right: 16px; width: auto; }
+  .mentor-fab { right: 16px; bottom: 16px; }
   .bar { grid-template-columns: 100px 1fr 34px; }
 }
 
@@ -734,6 +737,7 @@ function render() {
   const v = $('#view');
   $('#crumbs').textContent = ({ dashboard: 'Dashboard', project: 'Current project', play: 'Scenario — vertical slice', findrule: 'Find the Rule', review: 'Knowledge review', profile: 'Player profile', assessment: 'Competency assessment' })[currentPage] || '';
   v.innerHTML = '';
+  if (currentPage !== 'play') document.querySelector('.mentor-wrap')?.remove();
   ({ dashboard: renderDashboard, project: renderProject, play: renderPlay, findrule: renderFindRuleStandalone, review: renderReview, profile: renderProfile, assessment: renderAssessment }[currentPage] || renderDashboard)(v);
 }
 
@@ -786,6 +790,8 @@ function renderProject(v) {
 const FLOW = ['brief', 'investigate', 'findrule', 'decide', 'consequence', 'learn'];
 function startScenario(scn) {
   run = { scn, step: 'brief', evidenceChosen: [], ruleSel: {}, ruleCorrect: false, decisionId: null, result: null, cons: null, hintLevel: 0 };
+  mentorOpen = false;
+  document.querySelector('.mentor-wrap')?.remove();
 }
 function renderPlay(v) {
   if (!run) {
@@ -1054,14 +1060,29 @@ function renderAssessment(v) {
 }
 
 // ---------- mentor with progressive hint ladder (§27) ----------
+// The mentor lives in its own persistent wrapper on <body>, so re-rendering the
+// scenario view (e.g. toggling evidence) never rebuilds or re-opens it.
+let mentorOpen = false;
 function mountMentor() {
-  document.querySelector('.mentor')?.remove();
-  if (!run) return;
+  if (!run || currentPage !== 'play') { document.querySelector('.mentor-wrap')?.remove(); return; }
+  if (document.querySelector('.mentor-wrap')) return; // already mounted; leave it alone
+  const wrap = el('<div class="mentor-wrap"></div>');
+  document.body.appendChild(wrap);
+  drawMentor(wrap);
+}
+function drawMentor(wrap) {
+  wrap.innerHTML = '';
+  if (!mentorOpen) {
+    const fab = el('<button class="mentor-fab">🪵 Mentor</button>');
+    fab.onclick = () => { mentorOpen = true; drawMentor(wrap); };
+    wrap.appendChild(fab);
+    return;
+  }
   const m = el(`<div class="mentor"><span class="close" id="mc">✕</span><h4>🪵 Builder Mentor <span class="tag">${esc(E.MODES[profile.mode].label)}</span></h4>
     <div class="body" id="mbody"></div>
     <button class="btn ghost mt" id="hint" style="width:100%">Ask for a hint</button></div>`);
-  document.body.appendChild(m);
-  $('#mc', m).onclick = () => m.remove();
+  wrap.appendChild(m);
+  $('#mc', m).onclick = () => { mentorOpen = false; drawMentor(wrap); };
   renderHint($('#mbody', m));
   $('#hint', m).onclick = () => { run.hintLevel = Math.min(6, run.hintLevel + 1); renderHint($('#mbody', m)); };
 }

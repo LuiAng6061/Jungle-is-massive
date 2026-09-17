@@ -74,6 +74,8 @@ h2 { margin: 0 0 4px; font-size: 20px; }
 .okbox { background: #10261f; border: 1px solid #1f4d3a; color: var(--green); border-radius: 8px; padding: 10px; font-size: 13px; }
 .badbox { background: #2a1414; border: 1px solid #5a2020; color: var(--red); border-radius: 8px; padding: 10px; font-size: 13px; }
 
+.mentor-fab { position: fixed; right: 20px; bottom: 20px; background: var(--teal); color: #fff; border: none; border-radius: 999px; padding: 12px 18px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,.4); z-index: 20; }
+.mentor-fab:hover { background: var(--teal2); }
 .mentor { position: fixed; right: 20px; bottom: 20px; width: 320px; background: var(--panel); border: 1px solid var(--teal); border-radius: 12px; padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.4); z-index: 20; }
 .mentor h4 { margin: 0 0 6px; font-size: 14px; } .mentor .body { font-size: 13px; color: var(--muted); max-height: 200px; overflow-y: auto; }
 .mentor .close { float: right; cursor: pointer; color: var(--muted); }
@@ -91,5 +93,6 @@ a { color: var(--blue); }
   .grid.cols3, .grid.cols2 { grid-template-columns: 1fr; }
   .view { padding: 18px 16px; }
   .mentor { left: 16px; right: 16px; width: auto; }
+  .mentor-fab { right: 16px; bottom: 16px; }
   .bar { grid-template-columns: 100px 1fr 34px; }
 }

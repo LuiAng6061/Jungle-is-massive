@@ -45,6 +45,7 @@ function render() {
   const v = $('#view');
   $('#crumbs').textContent = ({ dashboard: 'Dashboard', project: 'Current project', play: 'Scenario — vertical slice', findrule: 'Find the Rule', review: 'Knowledge review', profile: 'Player profile', assessment: 'Competency assessment' })[currentPage] || '';
   v.innerHTML = '';
+  if (currentPage !== 'play') document.querySelector('.mentor-wrap')?.remove();
   ({ dashboard: renderDashboard, project: renderProject, play: renderPlay, findrule: renderFindRuleStandalone, review: renderReview, profile: renderProfile, assessment: renderAssessment }[currentPage] || renderDashboard)(v);
 }
 
@@ -97,6 +98,8 @@ function renderProject(v) {
 const FLOW = ['brief', 'investigate', 'findrule', 'decide', 'consequence', 'learn'];
 function startScenario(scn) {
   run = { scn, step: 'brief', evidenceChosen: [], ruleSel: {}, ruleCorrect: false, decisionId: null, result: null, cons: null, hintLevel: 0 };
+  mentorOpen = false;
+  document.querySelector('.mentor-wrap')?.remove();
 }
 function renderPlay(v) {
   if (!run) {
@@ -365,14 +368,29 @@ function renderAssessment(v) {
 }
 
 // ---------- mentor with progressive hint ladder (§27) ----------
+// The mentor lives in its own persistent wrapper on <body>, so re-rendering the
+// scenario view (e.g. toggling evidence) never rebuilds or re-opens it.
+let mentorOpen = false;
 function mountMentor() {
-  document.querySelector('.mentor')?.remove();
-  if (!run) return;
+  if (!run || currentPage !== 'play') { document.querySelector('.mentor-wrap')?.remove(); return; }
+  if (document.querySelector('.mentor-wrap')) return; // already mounted; leave it alone
+  const wrap = el('<div class="mentor-wrap"></div>');
+  document.body.appendChild(wrap);
+  drawMentor(wrap);
+}
+function drawMentor(wrap) {
+  wrap.innerHTML = '';
+  if (!mentorOpen) {
+    const fab = el('<button class="mentor-fab">🪵 Mentor</button>');
+    fab.onclick = () => { mentorOpen = true; drawMentor(wrap); };
+    wrap.appendChild(fab);
+    return;
+  }
   const m = el(`<div class="mentor"><span class="close" id="mc">✕</span><h4>🪵 Builder Mentor <span class="tag">${esc(E.MODES[profile.mode].label)}</span></h4>
     <div class="body" id="mbody"></div>
     <button class="btn ghost mt" id="hint" style="width:100%">Ask for a hint</button></div>`);
-  document.body.appendChild(m);
-  $('#mc', m).onclick = () => m.remove();
+  wrap.appendChild(m);
+  $('#mc', m).onclick = () => { mentorOpen = false; drawMentor(wrap); };
   renderHint($('#mbody', m));
   $('#hint', m).onclick = () => { run.hintLevel = Math.min(6, run.hintLevel + 1); renderHint($('#mbody', m)); };
 }
