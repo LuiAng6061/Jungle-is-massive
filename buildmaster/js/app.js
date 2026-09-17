@@ -339,8 +339,29 @@ function renderProfile(v) {
       ${gate.passed ? '<div class="okbox">Gate met — progression not blocked by this gate.</div>'
         : `<div class="warnbox">Not yet: strengthen ${gate.failing.join(', ')}. XP alone does not advance you.</div>`}
     </div>
-    <div class="card"><h3>Personal learning observations</h3>${learningObservations()}</div>
+    <div class="card mb"><h3>Personal learning observations</h3>${learningObservations()}</div>
+    <div class="card"><h3>Progress data</h3>
+      <p class="muted">Your progress is saved automatically in this browser. Export a backup or start over.</p>
+      <div class="row"><button class="btn ghost" id="export">Export progress (JSON)</button>
+        <button class="btn ghost" id="reset">Reset progress</button></div>
+    </div>
   </div>`));
+  $('#export', v).onclick = exportProgress;
+  $('#reset', v).onclick = () => {
+    if (confirm('Reset all progress? This clears your XP, skills and knowledge in this browser.')) {
+      profile = E.newProfile(); profile.mode = $('#mode').value; run = null; persist(); setPage('profile');
+    }
+  };
+}
+function exportProgress() {
+  try {
+    const blob = new Blob([JSON.stringify(profile, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'buildmaster-progress.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (_) { alert('Export not available in this browser.'); }
 }
 function learningObservations() {
   const s = profile.skills; const obs = [];
