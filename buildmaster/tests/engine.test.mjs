@@ -6,7 +6,29 @@ import assert from 'node:assert/strict';
 
 import * as E from '../js/engine.js';
 import * as R from '../js/regulatory.js';
-import { SCENARIOS, TOPICS, SOURCES } from '../js/data.js';
+import { SCENARIOS, TOPICS, SOURCES, DEFECTS, EVENTS } from '../js/data.js';
+
+test('content breadth: expanded topic/scenario/defect counts', () => {
+  assert.ok(TOPICS.length >= 20, `expected >=20 topics, got ${TOPICS.length}`);
+  assert.ok(SCENARIOS.length >= 7, `expected >=7 scenarios, got ${SCENARIOS.length}`);
+  assert.ok(DEFECTS.length >= 12, `expected >=12 defects, got ${DEFECTS.length}`);
+});
+
+test('every scenario topic and event topic resolves to a real topic', () => {
+  const ids = new Set(TOPICS.map((t) => t.id));
+  for (const s of SCENARIOS) assert.ok(ids.has(s.topic), `scenario ${s.id} topic ${s.topic}`);
+  for (const e of EVENTS) assert.ok(ids.has(e.topic), `event ${e.id} topic ${e.topic}`);
+});
+
+test('every defect topic resolves (or is intentionally null)', () => {
+  const ids = new Set(TOPICS.map((t) => t.id));
+  for (const d of DEFECTS) assert.ok(d.topic === null || ids.has(d.topic), `defect ${d.id} topic ${d.topic}`);
+});
+
+test('topic ids are unique', () => {
+  const ids = TOPICS.map((t) => t.id);
+  assert.equal(new Set(ids).size, ids.length);
+});
 
 test('seeded RNG is deterministic and replayable', () => {
   const a = E.makeRng(E.hashSeed('proj:42')); const b = E.makeRng(E.hashSeed('proj:42'));

@@ -1,5 +1,5 @@
 // BuildMaster Australia — UI CONTROLLER (vertical slice runner + dashboard + profile)
-import { META, PROJECT, SCENARIOS, TOPICS, SKILL_AXES, SUBCONTRACTORS, CLIENT } from './data.js';
+import { META, PROJECT, SCENARIOS, TOPICS, SKILL_AXES, SUBCONTRACTORS, CLIENT, DEFECTS } from './data.js';
 import * as R from './regulatory.js';
 import * as E from './engine.js';
 
@@ -90,6 +90,12 @@ function renderProject(v) {
     <div class="grid cols3">
       ${SUBCONTRACTORS.map((s) => `<div class="card"><h3>${esc(s.trade)}</h3><div class="muted">Competence ${s.competence}/5 · Docs ${s.documentation}/5</div><div class="muted">${esc(s.risk)}</div></div>`).join('')}
       <div class="card"><h3>Client — ${esc(CLIENT.name)}</h3><div class="muted">${esc(CLIENT.note)}</div></div>
+    </div>
+    <h3 class="mt">Common defects to watch (not all are automatically non-compliant)</h3>
+    <div class="grid cols2">
+      ${DEFECTS.map((d) => `<div class="card"><h3>${esc(d.text)}</h3>
+        <div class="muted">${esc(d.area)} · <span class="tag ${d.severity === 'critical' || d.severity === 'high' ? 'bad' : d.severity === 'medium' ? 'warn' : ''}">${esc(d.severity)}</span>
+        ${d.maybeAcceptable ? ' <span class="tag">may be acceptable — investigate</span>' : ''}</div></div>`).join('')}
     </div>
   </div>`));
 }
