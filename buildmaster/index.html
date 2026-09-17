@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BuildMaster Australia — WA Builder Training Simulator</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f766e'/%3E%3Ctext x='32' y='44' font-family='Arial' font-size='34' font-weight='bold' text-anchor='middle' fill='%23fbbf24'%3EB%3C/text%3E%3C/svg%3E"/>
+  <link rel="stylesheet" href="css/buildmaster.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h1>BuildMaster <span>AU</span></h1>
+      <div class="sub">WA residential builder training · educational simulation</div>
+      <ul class="nav" id="nav">
+        <li data-page="dashboard" class="active"><span class="dot"></span>Dashboard</li>
+        <li data-page="project"><span class="dot"></span>Current project</li>
+        <li data-page="play"><span class="dot"></span>Scenario / vertical slice</li>
+        <li data-page="findrule"><span class="dot"></span>Find the Rule</li>
+        <li data-page="review"><span class="dot"></span>Knowledge review</li>
+        <li data-page="profile"><span class="dot"></span>Player profile</li>
+        <li data-page="assessment"><span class="dot"></span>Competency assessment</li>
+      </ul>
+      <div class="mode-box">
+        <label>Difficulty</label>
+        <select id="mode">
+          <option value="beginner">Beginner (guided)</option>
+          <option value="builder">Builder</option>
+          <option value="expert">Expert (minimal help)</option>
+        </select>
+      </div>
+      <div class="seedbox">
+        <button id="newProject" class="btn ghost">New random project</button>
+        <button id="replay" class="btn ghost">Replay (seed)</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="crumbs" id="crumbs">Dashboard</div>
+        <div class="stats">
+          <span class="pill">Lvl <b id="tbLevel">1</b></span>
+          <span class="pill">XP <b id="tbXp">0</b></span>
+          <span class="pill" id="tbLevelName">Construction Beginner</span>
+        </div>
+      </header>
+      <section id="view" class="view"><!-- rendered by app.js --></section>
+      <footer class="disclaimer" id="disclaimer"></footer>
+    </main>
+  </div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

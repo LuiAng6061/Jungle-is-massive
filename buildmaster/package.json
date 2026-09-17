@@ -1,0 +1,11 @@
+{
+  "name": "buildmaster-australia",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "BuildMaster Australia — WA residential builder training & compliance simulator (static vertical slice).",
+  "scripts": {
+    "test": "node --test tests/engine.test.mjs",
+    "serve": "node --version >/dev/null && python3 -m http.server 8080"
+  }
+}
