@@ -184,17 +184,26 @@ function renderStep(body) {
       <button class="btn mt" id="next" disabled>Commit decision ▶</button>
     </div>`));
     const decBox = $('#dec', body);
+    const nx = $('#next', body); nx.disabled = !run.decisionId;
     scn.decisions.forEach((d) => {
       const b = el(`<button class="choice ${run.decisionId === d.id ? 'selected' : ''}">${esc(d.label)}${d.note ? ` <span class="tag warn">${esc(d.note)}</span>` : ''}</button>`);
-      b.onclick = () => { run.decisionId = d.id; render(); };
+      // Update in place — do NOT re-render, or the expert free-text box would be wiped.
+      b.onclick = () => {
+        run.decisionId = d.id;
+        decBox.querySelectorAll('.choice').forEach((x) => x.classList.remove('selected'));
+        b.classList.add('selected');
+        nx.disabled = false;
+      };
       decBox.appendChild(b);
     });
-    const nx = $('#next', body); nx.disabled = !run.decisionId;
+    // Expert free-text: persist on every keystroke and restore across re-renders.
+    const ft = $('#ft', body);
+    if (ft) { ft.value = run.freeText || ''; ft.oninput = () => { run.freeText = ft.value; }; }
     nx.onclick = () => {
+      if (ft) run.freeText = ft.value;
       run.result = E.scoreScenario(scn, { evidenceChosen: run.evidenceChosen, ruleCorrect: run.ruleCorrect, decisionId: run.decisionId, mode: profile.mode });
       const rng = E.makeRng(E.hashSeed(`${seed}:${scn.id}:${run.decisionId}`));
       run.cons = E.resolveConsequence(scn, run.result, rng);
-      if ($('#ft', body)) run.freeText = $('#ft', body).value;
       run.step = 'consequence'; render();
     };
     return;
