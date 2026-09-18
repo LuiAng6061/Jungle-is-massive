@@ -6,6 +6,7 @@
   "description": "BuildMaster Australia — WA residential builder training & compliance simulator (static vertical slice).",
   "scripts": {
     "test": "node --test tests/engine.test.mjs",
-    "serve": "node --version >/dev/null && python3 -m http.server 8080"
+    "build": "node build.mjs",
+    "serve": "python3 -m http.server 8080"
   }
 }

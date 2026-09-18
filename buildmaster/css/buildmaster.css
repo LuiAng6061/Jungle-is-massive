@@ -27,7 +27,9 @@ select { background: var(--panel2); color: var(--ink); border: 1px solid var(--l
 
 .main { display: flex; flex-direction: column; min-width: 0; }
 .topbar { display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; border-bottom: 1px solid var(--line); background: var(--panel); }
-.crumbs { font-weight: 600; }
+.crumbs { font-weight: 600; display: flex; align-items: center; gap: 12px; }
+.backbtn { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+.backbtn:hover { background: var(--teal); color: #fff; border-color: var(--teal); }
 .stats { display: flex; gap: 8px; }
 .pill { background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; color: var(--muted); }
 .pill b { color: var(--amber); }

@@ -2,6 +2,7 @@
 import { META, PROJECT, SCENARIOS, TOPICS, SKILL_AXES, SUBCONTRACTORS, CLIENT, DEFECTS } from './data.js';
 import * as R from './regulatory.js';
 import * as E from './engine.js';
+import { diagramFor } from './diagrams.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
@@ -24,12 +25,18 @@ function boot() {
   });
   $('#newProject').addEventListener('click', () => { seed = Math.floor(Math.random() * 1e9); profile.seed = seed; run = null; persist(); setPage('play'); });
   $('#replay').addEventListener('click', () => { const s = prompt('Enter project seed to replay', String(seed)); if (s) { seed = parseInt(s, 10) || seed; profile.seed = seed; run = null; persist(); setPage('play'); } });
-  render();
+  window.addEventListener('hashchange', applyRoute);
+  applyRoute();
 }
 
-function setPage(p) {
-  currentPage = p;
-  document.querySelectorAll('#nav li').forEach((li) => li.classList.toggle('active', li.dataset.page === p));
+const PAGES = ['dashboard', 'project', 'play', 'findrule', 'review', 'profile', 'assessment'];
+// URL-hash routing: each section is its own page (#play, #profile…) with real Back-button support.
+function setPage(p) { if ((location.hash.slice(1) || 'dashboard') === p) applyRoute(); else location.hash = p; }
+function applyRoute() {
+  const p = location.hash.slice(1);
+  currentPage = PAGES.includes(p) ? p : 'dashboard';
+  document.querySelectorAll('#nav li').forEach((li) => li.classList.toggle('active', li.dataset.page === currentPage));
+  window.scrollTo(0, 0);
   render();
 }
 function persist() { E.saveProfile(profile); syncTopbar(); }
@@ -43,7 +50,10 @@ function syncTopbar() {
 function render() {
   syncTopbar();
   const v = $('#view');
-  $('#crumbs').textContent = ({ dashboard: 'Dashboard', project: 'Current project', play: 'Scenario — vertical slice', findrule: 'Find the Rule', review: 'Knowledge review', profile: 'Player profile', assessment: 'Competency assessment' })[currentPage] || '';
+  const title = ({ dashboard: 'Dashboard', project: 'Current project', play: 'Scenario — vertical slice', findrule: 'Find the Rule', review: 'Knowledge review', profile: 'Player profile', assessment: 'Competency assessment' })[currentPage] || '';
+  const back = currentPage !== 'dashboard' ? '<button class="backbtn" id="back">← Back</button>' : '';
+  $('#crumbs').innerHTML = back + `<span>${title}</span>`;
+  const b = $('#back'); if (b) b.onclick = () => { if (history.length > 1) history.back(); else setPage('dashboard'); };
   v.innerHTML = '';
   if (currentPage !== 'play') document.querySelector('.mentor-wrap')?.remove();
   ({ dashboard: renderDashboard, project: renderProject, play: renderPlay, findrule: renderFindRuleStandalone, review: renderReview, profile: renderProfile, assessment: renderAssessment }[currentPage] || renderDashboard)(v);
@@ -141,6 +151,7 @@ function renderStep(body) {
     body.appendChild(el(`<div>
       <div class="card mb"><h3>Site event</h3><p>${esc(scn.brief)}</p>
         <div class="muted">Skills in play: ${scn.skillsTested.join(', ')} · Difficulty ${scn.difficulty}</div></div>
+      ${diagramFor(scn) ? `<div class="card mb"><h3>Illustration</h3>${diagramFor(scn)}</div>` : ''}
       <button class="btn" id="next">Investigate ▶</button>
     </div>`));
     $('#next', body).onclick = () => { run.step = 'investigate'; render(); };
@@ -212,6 +223,7 @@ function renderStep(body) {
         <p><b>Better investigation:</b> ${esc(l.better)}</p>
         <p class="muted">+${res.xp} XP · overall ${res.overall}/100</p>
       </div>
+      ${diagramFor(scn) ? `<div class="card mb"><h3>Illustration</h3>${diagramFor(scn)}</div>` : ''}
       ${sourcePanelHtml(sp)}
       ${run.freeText ? freeTextFeedback(scn, run.freeText) : ''}
       <div class="row mt"><button class="btn" id="again">Play another scenario</button><button class="btn ghost" id="dash">Back to dashboard</button></div>
