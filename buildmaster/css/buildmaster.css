@@ -82,6 +82,7 @@ h2 { margin: 0 0 4px; font-size: 20px; }
 .mentor h4 { margin: 0 0 6px; font-size: 14px; } .mentor .body { font-size: 13px; color: var(--muted); max-height: 200px; overflow-y: auto; }
 .mentor .close { float: right; cursor: pointer; color: var(--muted); }
 
+.diagram-sm svg { max-width: 100%; height: auto; }
 .bars { display: flex; flex-direction: column; gap: 8px; }
 .bar { display: grid; grid-template-columns: 140px 1fr 40px; align-items: center; gap: 10px; font-size: 13px; }
 .bar .track { background: var(--panel2); border-radius: 999px; height: 10px; overflow: hidden; }

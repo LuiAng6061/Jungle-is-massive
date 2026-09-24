@@ -2,7 +2,7 @@
 import { META, PROJECT, SCENARIOS, TOPICS, SKILL_AXES, SUBCONTRACTORS, CLIENT, DEFECTS } from './data.js';
 import * as R from './regulatory.js';
 import * as E from './engine.js';
-import { diagramFor } from './diagrams.js';
+import { diagramFor, diagramForTopic } from './diagrams.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
@@ -103,9 +103,10 @@ function renderProject(v) {
     </div>
     <h3 class="mt">Common defects to watch (not all are automatically non-compliant)</h3>
     <div class="grid cols2">
-      ${DEFECTS.map((d) => `<div class="card"><h3>${esc(d.text)}</h3>
-        <div class="muted">${esc(d.area)} · <span class="tag ${d.severity === 'critical' || d.severity === 'high' ? 'bad' : d.severity === 'medium' ? 'warn' : ''}">${esc(d.severity)}</span>
-        ${d.maybeAcceptable ? ' <span class="tag">may be acceptable — investigate</span>' : ''}</div></div>`).join('')}
+      ${DEFECTS.map((d) => { const tp = TOPICS.find((x) => x.id === d.topic); return `<div class="card"><h3>${esc(d.text)}</h3>
+        <div class="muted mb">${esc(d.area)} · <span class="tag ${d.severity === 'critical' || d.severity === 'high' ? 'bad' : d.severity === 'medium' ? 'warn' : ''}">${esc(d.severity)}</span>
+        ${d.maybeAcceptable ? ' <span class="tag">may be acceptable — investigate</span>' : ''}</div>
+        ${tp ? `<div class="diagram-sm">${diagramForTopic(tp)}</div>` : ''}</div>`; }).join('')}
     </div>
   </div>`));
 }
@@ -340,6 +341,7 @@ function renderReview(v) {
         const due = dueIds.includes(t.id);
         return `<div class="card"><h3>${esc(t.topic)} ${due ? '<span class="tag warn">due</span>' : ''}</h3>
           <div class="muted mb">${esc(t.category)} · ${esc(t.skill)} · status ${esc(t.status)} (${esc(t.confidence)})</div>
+          <div class="diagram-sm mb">${diagramForTopic(t)}</div>
           <div class="bar"><span class="muted">retention</span><div class="track"><div class="fill" style="width:${k.score}%"></div></div><span>${k.score}</span></div>
           <div class="muted mt" style="font-size:12px">seen ${k.seen || 0}×</div></div>`;
       }).join('')}
