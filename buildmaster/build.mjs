@@ -13,12 +13,13 @@ function strip(src) {
 
 const data = strip(read('./js/data.js'));
 const diagrams = strip(read('./js/diagrams.js'));
+const spot = strip(read('./js/spot.js'));
 const reg = strip(read('./js/regulatory.js'));
 const eng = strip(read('./js/engine.js'));
 const app = strip(read('./js/app.js'));
 const R = 'const R={getSource,getTopic,regulatoryContext,sourcePanel,STATUS};';
 const E = 'const E={makeRng,hashSeed,MODES,newProfile,levelFromXp,levelName,competencyGate,SCORE_DIMS,scoreScenario,resolveConsequence,updateKnowledge,dueForReview,applyResult,pickEvent,evaluateFreeText,loadProfile,saveProfile,SCENARIOS};';
-const bundle = [data, diagrams, reg, eng, R, E, app].join('\n\n/* ---- */\n\n');
+const bundle = [data, diagrams, spot, reg, eng, R, E, app].join('\n\n/* ---- */\n\n');
 
 let html = read('./index.html');
 html = html.replace(/\s*<link rel="stylesheet" href="css\/buildmaster.css" \/>/, '\n  <style>\n' + read('./css/buildmaster.css') + '\n  </style>');

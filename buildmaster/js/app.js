@@ -3,6 +3,7 @@ import { META, PROJECT, SCENARIOS, TOPICS, SKILL_AXES, SUBCONTRACTORS, CLIENT, D
 import * as R from './regulatory.js';
 import * as E from './engine.js';
 import { diagramFor, diagramForTopic } from './diagrams.js';
+import { SPOTS } from './spot.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
@@ -29,7 +30,7 @@ function boot() {
   applyRoute();
 }
 
-const PAGES = ['dashboard', 'project', 'play', 'findrule', 'review', 'profile', 'assessment'];
+const PAGES = ['dashboard', 'project', 'play', 'spot', 'findrule', 'review', 'profile', 'assessment'];
 // URL-hash routing: each section is its own page (#play, #profile…) with real Back-button support.
 function setPage(p) { if ((location.hash.slice(1) || 'dashboard') === p) applyRoute(); else location.hash = p; }
 function applyRoute() {
@@ -50,13 +51,13 @@ function syncTopbar() {
 function render() {
   syncTopbar();
   const v = $('#view');
-  const title = ({ dashboard: 'Dashboard', project: 'Current project', play: 'Scenario — vertical slice', findrule: 'Find the Rule', review: 'Knowledge review', profile: 'Player profile', assessment: 'Competency assessment' })[currentPage] || '';
+  const title = ({ dashboard: 'Dashboard', project: 'Current project', play: 'Scenario — vertical slice', spot: 'Spot the defect', findrule: 'Find the Rule', review: 'Knowledge review', profile: 'Player profile', assessment: 'Competency assessment' })[currentPage] || '';
   const back = currentPage !== 'dashboard' ? '<button class="backbtn" id="back">← Back</button>' : '';
   $('#crumbs').innerHTML = back + `<span>${title}</span>`;
   const b = $('#back'); if (b) b.onclick = () => { if (history.length > 1) history.back(); else setPage('dashboard'); };
   v.innerHTML = '';
   if (currentPage !== 'play') document.querySelector('.mentor-wrap')?.remove();
-  ({ dashboard: renderDashboard, project: renderProject, play: renderPlay, findrule: renderFindRuleStandalone, review: renderReview, profile: renderProfile, assessment: renderAssessment }[currentPage] || renderDashboard)(v);
+  ({ dashboard: renderDashboard, project: renderProject, play: renderPlay, spot: renderSpot, findrule: renderFindRuleStandalone, review: renderReview, profile: renderProfile, assessment: renderAssessment }[currentPage] || renderDashboard)(v);
 }
 
 // ---------- dashboard (§41) ----------
@@ -77,12 +78,14 @@ function renderDashboard(v) {
     </div>
     <div class="row">
       <button class="btn" id="go-play">▶ Continue / Play scenario</button>
+      <button class="btn ghost" id="go-spot">Spot the defect</button>
       <button class="btn ghost" id="go-project">Review documents</button>
       <button class="btn ghost" id="go-find">Find the Rule</button>
       <button class="btn ghost" id="go-review">Knowledge review</button>
     </div>
   </div>`));
   $('#go-play', v).onclick = () => setPage('play');
+  $('#go-spot', v).onclick = () => setPage('spot');
   $('#go-project', v).onclick = () => setPage('project');
   $('#go-find', v).onclick = () => setPage('findrule');
   $('#go-review', v).onclick = () => setPage('review');
@@ -327,6 +330,57 @@ function sourcePanelHtml(sp) {
     <div><span class="k">Source:</span> <a href="${esc(sp.source_url)}" target="_blank" rel="noopener">${esc(sp.source_url)}</a></div>
     ${sp.warning ? `<div class="warnbox mt">${esc(sp.warning)}</div>` : ''}
   </div>`;
+}
+
+// ---------- Spot the defect (interactive visual mode) ----------
+let spotState = { index: 0, answered: false, picked: null };
+function renderSpot(v) {
+  const scene = SPOTS[spotState.index % SPOTS.length];
+  const overlay = scene.hotspots.map((h, i) => {
+    let stroke = 'rgba(255,255,255,0.35)', fill = 'rgba(255,255,255,0.04)', sw = 1.5;
+    if (spotState.answered) {
+      if (h.correct) { stroke = '#4ade80'; fill = 'rgba(74,222,128,0.15)'; sw = 2.5; }
+      else { stroke = '#f87171'; fill = 'rgba(248,113,113,0.06)'; }
+      if (spotState.picked === i && !h.correct) { fill = 'rgba(248,113,113,0.22)'; sw = 2.5; }
+    }
+    return `<circle class="hot" data-i="${i}" cx="${h.x}" cy="${h.y}" r="${h.r}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${spotState.answered ? '' : ' style="cursor:pointer"'}/>`;
+  }).join('');
+  const svg = `<svg viewBox="0 0 480 300" width="100%" style="max-width:560px;background:#16223a;border-radius:10px;border:1px solid #243352">${scene.bg}${overlay}</svg>`;
+
+  let feedback = '';
+  if (spotState.answered) {
+    const picked = scene.hotspots[spotState.picked];
+    const correct = scene.hotspots.find((h) => h.correct);
+    feedback = `<div class="${picked.correct ? 'okbox' : 'badbox'} mt mb">
+      <b>${picked.correct ? '✓ Correct' : '✗ Not quite'}</b>
+      <p style="margin:6px 0 0">You clicked: <b>${esc(picked.label)}</b> — ${esc(picked.explain)}</p>
+      ${picked.correct ? '' : `<p style="margin:6px 0 0">The defect was: <b>${esc(correct.label)}</b> — ${esc(correct.explain)}</p>`}
+    </div>
+    <button class="btn" id="spotnext">Next scene ▶</button>`;
+  }
+
+  v.appendChild(el(`<div>
+    <h2>${esc(scene.title)}</h2>
+    <p class="lead">${esc(scene.prompt)} <span class="tag">skill: ${esc(scene.skill)}</span> <span class="muted">Scene ${(spotState.index % SPOTS.length) + 1} of ${SPOTS.length}</span></p>
+    <div id="spotscene">${svg}</div>
+    <div id="spotfb">${feedback}</div>
+  </div>`));
+
+  if (!spotState.answered) {
+    v.querySelectorAll('#spotscene .hot').forEach((c) => {
+      c.addEventListener('click', () => {
+        spotState.picked = parseInt(c.dataset.i, 10);
+        spotState.answered = true;
+        const h = scene.hotspots[spotState.picked];
+        if (h.correct) { profile.xp += 12; profile.level = E.levelFromXp(profile.xp); if (profile.skills[scene.skill] != null) profile.skills[scene.skill] = Math.min(100, profile.skills[scene.skill] + 4); }
+        E.updateKnowledge(profile, scene.topic, h.correct);
+        persist();
+        render();
+      });
+    });
+  } else {
+    $('#spotnext', v).onclick = () => { spotState = { index: spotState.index + 1, answered: false, picked: null }; render(); };
+  }
 }
 
 // ---------- knowledge review (§10) ----------
