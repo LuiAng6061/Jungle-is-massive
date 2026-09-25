@@ -4,6 +4,18 @@ import * as R from './regulatory.js';
 import * as E from './engine.js';
 import { diagramFor, diagramForTopic } from './diagrams.js';
 import { SPOTS } from './spot.js';
+import { photoForTopic, PHOTO_LIST } from './photos.js';
+
+// Real-world photo block with required CC-BY attribution.
+function photoHtml(topicId) {
+  const p = photoForTopic(topicId);
+  if (!p) return '';
+  return `<figure class="photo mb">
+    <img src="${p.data}" alt="${esc(p.alt)}" loading="lazy"/>
+    <figcaption>📷 Real-world example — ${esc(p.note)}<br>
+      <span class="muted">“${esc(p.title)}” by ${esc(p.credit)}, <a href="${esc(p.licenseUrl)}" target="_blank" rel="noopener">${esc(p.license)}</a> · <a href="${esc(p.sourceUrl)}" target="_blank" rel="noopener">source</a></span>
+    </figcaption></figure>`;
+}
 
 const $ = (s, el = document) => el.querySelector(s);
 const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
@@ -155,7 +167,7 @@ function renderStep(body) {
     body.appendChild(el(`<div>
       <div class="card mb"><h3>Site event</h3><p>${esc(scn.brief)}</p>
         <div class="muted">Skills in play: ${scn.skillsTested.join(', ')} · Difficulty ${scn.difficulty}</div></div>
-      ${diagramFor(scn) ? `<div class="card mb"><h3>Illustration</h3>${diagramFor(scn)}</div>` : ''}
+      ${diagramFor(scn) ? `<div class="card mb"><h3>Illustration</h3>${diagramFor(scn)}${photoHtml(scn.topic)}</div>` : ''}
       <button class="btn" id="next">Investigate ▶</button>
     </div>`));
     $('#next', body).onclick = () => { run.step = 'investigate'; render(); };
@@ -396,6 +408,7 @@ function renderReview(v) {
         return `<div class="card"><h3>${esc(t.topic)} ${due ? '<span class="tag warn">due</span>' : ''}</h3>
           <div class="muted mb">${esc(t.category)} · ${esc(t.skill)} · status ${esc(t.status)} (${esc(t.confidence)})</div>
           <div class="diagram-sm mb">${diagramForTopic(t)}</div>
+          ${photoHtml(t.id)}
           <div class="bar"><span class="muted">retention</span><div class="track"><div class="fill" style="width:${k.score}%"></div></div><span>${k.score}</span></div>
           <div class="muted mt" style="font-size:12px">seen ${k.seen || 0}×</div></div>`;
       }).join('')}
@@ -421,6 +434,10 @@ function renderProfile(v) {
       <p class="muted">Your progress is saved automatically in this browser. Export a backup or start over.</p>
       <div class="row"><button class="btn ghost" id="export">Export progress (JSON)</button>
         <button class="btn ghost" id="reset">Reset progress</button></div>
+    </div>
+    <div class="card mt"><h3>Image credits</h3>
+      <p class="muted">Diagrams are original to BuildMaster. Real-world photos are used under their open licences with attribution:</p>
+      <ul class="muted">${PHOTO_LIST.map((p) => `<li>“${esc(p.title)}” by ${esc(p.credit)} — <a href="${esc(p.licenseUrl)}" target="_blank" rel="noopener">${esc(p.license)}</a> · <a href="${esc(p.sourceUrl)}" target="_blank" rel="noopener">source</a></li>`).join('')}</ul>
     </div>
   </div>`));
   $('#export', v).onclick = exportProgress;
